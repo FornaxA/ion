@@ -118,48 +118,51 @@ bool CBlockTreeDB::ReadLastBlockFile(int& nFile)
     return Read('l', nFile);
 }
 
-bool CCoinsViewDB::GetStats(CCoinsStats& stats) const
+CCoinsViewCursor *CCoinsViewDB::Cursor() const
 {
+    CCoinsViewDBCursor *i = new CCoinsViewDBCursor(const_cast<CLevelDBWrapper*>(&db)->NewIterator(), GetBestBlock());
     /* It seems that there are no "const iterators" for LevelDB.  Since we
        only need read operations on it, use a const-cast to get around
        that restriction.  */
-    boost::scoped_ptr<CLevelDBIterator> pcursor(const_cast<CLevelDBWrapper*>(&db)->NewIterator());
-    pcursor->Seek('c');
-
-    CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
-    stats.hashBlock = GetBestBlock();
-    ss << stats.hashBlock;
-    CAmount nTotalAmount = 0;
-    while (pcursor->Valid()) {
-        boost::this_thread::interruption_point();
-        std::pair<char, uint256> key;
-        CCoins coins;
-        if (pcursor->GetKey(key) && key.first == 'c') {
-            if (pcursor->GetValue(coins)) {
-                stats.nTransactions++;
-                for (unsigned int i = 0; i < coins.vout.size(); i++) {
-                    const CTxOut& out = coins.vout[i];
-                    if (!out.IsNull()) {
-                        stats.nTransactionOutputs++;
-                        ss << VARINT(i + 1);
-                        ss << out;
-                        nTotalAmount += out.nValue;
-                    }
-                }
-                stats.nSerializedSize += 32 + pcursor->GetKeySize();
-                ss << VARINT(0);
-            } else {
-                return error("CCoinsViewDB::GetStats() : unable to read value");
-            }
-        } else {
-            break;
-        }
-        pcursor->Next();
+    i->pcursor->Seek('c');
+    // Cache key of first record
+    i->pcursor->GetKey(i->keyTmp);
+    return i;
+}
+bool CCoinsViewDBCursor::GetKey(uint256 &key) const
+{
+    // Return cached key
+    if (keyTmp.first == 'c') {
+        key = keyTmp.second;
+        return true;
     }
-    stats.nHeight = mapBlockIndex.find(GetBestBlock())->second->nHeight;
-    stats.hashSerialized = ss.GetHash();
-    stats.nTotalAmount = nTotalAmount;
-    return true;
+    return false;
+}
+
+bool CCoinsViewDBCursor::GetValue(CCoins &coins) const
+{
+    return pcursor->GetValue(coins);
+}
+
+unsigned int CCoinsViewDBCursor::GetValueSize() const
+{
+    return pcursor->GetValueSize();
+}
+
+bool CCoinsViewDBCursor::Valid() const
+{
+    return keyTmp.first == 'c';
+}
+
+void CCoinsViewDBCursor::Next()
+{
+    pcursor->Next();
+    if (pcursor->Valid()) {
+        bool ok = pcursor->GetKey(keyTmp);
+        assert(ok); // If GetKey fails here something must be wrong with underlying database, we cannot handle that here
+    } else {
+        keyTmp.first = 0; // Invalidate cached key after last record so that Valid() and GetKey() return false
+    }
 }
 
 bool CBlockTreeDB::ReadTxIndex(const uint256& txid, CDiskTxPos& pos)

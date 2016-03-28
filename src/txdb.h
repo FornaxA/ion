@@ -27,6 +27,8 @@ static const int64_t nMaxDbCache = sizeof(void*) > 4 ? 4096 : 1024;
 //! min. -dbcache in (MiB)
 static const int64_t nMinDbCache = 4;
 
+class CCoinsViewDBCursor;
+
 /** CCoinsView backed by the LevelDB coin database (chainstate/) */
 class CCoinsViewDB : public CCoinsView
 {
@@ -36,11 +38,33 @@ protected:
 public:
     CCoinsViewDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
-    bool GetCoins(const uint256& txid, CCoins& coins) const;
-    bool HaveCoins(const uint256& txid) const;
-    uint256 GetBestBlock() const;
-    bool BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock);
-    bool GetStats(CCoinsStats& stats) const;
+    bool GetCoins(const uint256& txid, CCoins& coins) const override;
+    bool HaveCoins(const uint256& txid) const override;
+    uint256 GetBestBlock() const override;
+    bool BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock) override;
+    CCoinsViewCursor *Cursor() const override;
+};
+
+/** Specialization of CCoinsViewCursor to iterate over a CCoinsViewDB */
+class CCoinsViewDBCursor: public CCoinsViewCursor
+{
+public:
+    ~CCoinsViewDBCursor() {}
+
+    bool GetKey(uint256 &key) const;
+    bool GetValue(CCoins &coins) const;
+    unsigned int GetValueSize() const;
+
+    bool Valid() const;
+    void Next();
+
+private:
+    CCoinsViewDBCursor(CLevelDBIterator* pcursorIn, const uint256 &hashBlockIn):
+        CCoinsViewCursor(hashBlockIn), pcursor(pcursorIn) {}
+    boost::scoped_ptr<CLevelDBIterator> pcursor;
+    std::pair<char, uint256> keyTmp;
+
+    friend class CCoinsViewDB;
 };
 
 /** Access to the block database (blocks/index/) */
