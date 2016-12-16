@@ -86,6 +86,15 @@ bool Solver(const CKeyStore& keystore, const CScript& scriptPubKey, uint256 hash
             return false;
         }
         return true;
+    case TX_CLTV:
+    case TX_CSV:
+        keyID = CPubKey(vSolutions[1]).GetID();
+        if(!Sign1(keyID, keystore, hash, nHashType, scriptSigRet))
+        {
+            LogPrintf("*** Sign1 failed \n");
+            return false;
+        }
+        return true;
     case TX_PUBKEYHASH:
     case TX_GRP_PUBKEYHASH:
         keyID = CKeyID(uint160(vSolutions[0]));
@@ -234,6 +243,8 @@ static CScript CombineSignatures(const CScript& scriptPubKey, const CTransaction
         if (sigs1.size() >= sigs2.size())
             return PushAll(sigs1);
         return PushAll(sigs2);
+    case TX_CLTV:
+    case TX_CSV:
     case TX_PUBKEY:
     case TX_PUBKEYHASH:
     case TX_GRP_PUBKEYHASH:

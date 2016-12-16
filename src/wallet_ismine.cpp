@@ -30,13 +30,13 @@ unsigned int HaveKeys(const vector<valtype>& pubkeys, const CKeyStore& keystore)
     return nResult;
 }
 
-isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest)
+isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest, CBlockIndex* bestBlock)
 {
     CScript script = GetScriptForDestination(dest);
-    return IsMine(keystore, script);
+    return IsMine(keystore, script, bestBlock);
 }
 
-isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey)
+isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, CBlockIndex* bestBlock)
 {
     if(keystore.HaveWatchOnly(scriptPubKey))
         return ISMINE_WATCH_ONLY;
@@ -76,9 +76,11 @@ isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey)
         CScriptID scriptID = CScriptID(uint160(vSolutions[0]));
         CScript subscript;
         if(keystore.GetCScript(scriptID, subscript)) {
-            isminetype ret = IsMine(keystore, subscript);
-            if(ret != ISMINE_NO)
-                return ret;
+            isminetype ret = IsMine(keystore, subscript, bestBlock);
+            LogPrintf("Freeze SUBSCRIPT = %s! **** MINE=%d  *****  \n", subscript.ToString(), ret);
+            // if(ret != ISMINE_NO) TODO Don't understand why this line was required. Had to comment it so all
+            // minetypes in subscripts (eg CLTV) are recognizable
+            return ret;
         }
         break;
     }
@@ -92,6 +94,54 @@ isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey)
         if(HaveKeys(keys, keystore) == keys.size())
             return ISMINE_SPENDABLE;
         break;
+    }
+    case TX_CLTV:
+    {
+        keyID = CPubKey(vSolutions[1]).GetID();
+        if (keystore.HaveKey(keyID))
+        {
+            CScriptNum nFreezeLockTime(vSolutions[0], true, 5);
+
+            LogPrintf("Found Freeze Have Key. nFreezeLockTime=%d. BestBlockHeight=%d \n", nFreezeLockTime.getint64(), bestBlock->nHeight);
+            if (nFreezeLockTime < LOCKTIME_THRESHOLD)
+            {
+                // locktime is a block
+                if (nFreezeLockTime > bestBlock->nHeight)
+                    return ISMINE_MULTISIG;
+                else
+                    return ISMINE_SPENDABLE;
+            }
+            else
+            {
+                // locktime is a time
+                if (nFreezeLockTime > bestBlock->GetMedianTimePast())
+                    return ISMINE_MULTISIG;
+                else
+                    return ISMINE_SPENDABLE;
+            }
+        }
+        else
+        {
+            LogPrintf("Found Freeze DONT HAVE KEY!! \n");
+            return ISMINE_NO;
+        }
+    }
+    case TX_CSV:
+    {
+        keyID = CPubKey(vSolutions[1]).GetID();
+        if (keystore.HaveKey(keyID))
+        {
+            CScriptNum nFreezeSequence(vSolutions[0], true, 5);
+
+            LogPrintf("Found Freeze Have Key. nFreezeSequence=%d. BestBlockHeight=%d \n", nFreezeSequence.getint64(), bestBlock->nHeight);
+            // TODO: currently returns that the coin is present. Comparable to for TX_CLTV it needs to report if the coin is available.
+            return ISMINE_MULTISIG;
+        }
+        else
+        {
+            LogPrintf("Found Freeze DONT HAVE KEY!! \n");
+            return ISMINE_NO;
+        }
     }
     }
 

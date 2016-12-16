@@ -85,7 +85,7 @@ public:
             LOCK(wallet->cs_wallet);
             BOOST_FOREACH (const PAIRTYPE(CTxDestination, CAddressBookData) & item, wallet->mapAddressBook) {
                 const CTxDestination& address = item.first;
-                bool fMine = IsMine(*wallet, address);
+                bool fMine = IsMine(*wallet, address, chainActive.Tip());
                 AddressTableEntry::Type addressType = translateTransactionType(
                     QString::fromStdString(item.second.purpose), fMine);
                 const std::string& strName = item.second.name;
@@ -361,7 +361,7 @@ void AddressTableModel::updateEntry(const QString &pubCoin, const QString &isUse
 
 
 
-QString AddressTableModel::addRow(const QString& type, const QString& label, const QString& address)
+QString AddressTableModel::addRow(const QString& type, const QString& label, const QString& address, const CScriptNum nFreezeLockTime)
 {
     std::string strLabel = label.toStdString();
     std::string strAddress = address.toStdString();
@@ -396,7 +396,13 @@ QString AddressTableModel::addRow(const QString& type, const QString& label, con
                 return QString();
             }
         }
-        strAddress = EncodeDestination(newKey.GetID());
+        // Generate and load freeze script if nFreezeLockTime > 0
+        if (nFreezeLockTime > 0) {
+            if (!wallet->LoadFreezeLockTimeScript(newKey, nFreezeLockTime, strLabel, strAddress))
+                return QString();
+        }
+        else
+            strAddress = EncodeDestination(newKey.GetID());
     } else {
         return QString();
     }
