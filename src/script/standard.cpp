@@ -35,6 +35,8 @@ const char* GetTxnOutputType(txnouttype t)
     case TX_ZEROCOINMINT: return "zerocoinmint";
     case TX_GRP_PUBKEYHASH: return "grouppubkeyhash";
     case TX_GRP_SCRIPTHASH: return "groupscripthash";
+    case TX_CLTV: return "cltv";
+    case TX_CSV: return "csv";
     }
     return NULL;
 }
@@ -62,6 +64,12 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, vector<vector<unsi
 
         // Sender provides N pubkeys, receivers provides M signatures
         mTemplates.insert(make_pair(TX_MULTISIG, CScript() << OP_SMALLINTEGER << OP_PUBKEYS << OP_SMALLINTEGER << OP_CHECKMULTISIG));
+
+        // Freeze tx using CLTV ; nFreezeLockTime CLTV DROP (0x21 pubkeys) checksig
+        mTemplates.insert(make_pair(TX_CLTV, CScript() << OP_BIGINTEGER << OP_CHECKLOCKTIMEVERIFY << OP_DROP << OP_PUBKEYS << OP_CHECKSIG));
+
+        // Freeze tx using CSV ; nFreezeSequence CSV DROP (0x21 pubkeys) checksig
+        mTemplates.insert(make_pair(TX_CSV, CScript() << OP_BIGINTEGER << OP_CHECKSEQUENCEVERIFY << OP_DROP << OP_PUBKEYS << OP_CHECKSIG));
     }
 
     // Shortcut for pay-to-script-hash, which are more constrained than the other types:
@@ -175,6 +183,21 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, vector<vector<unsi
                 else
                     break;
             }
+            else if (opcode2 == OP_BIGINTEGER)
+            {
+                try
+                {
+                    CScriptNum n(vch1, true, 5);
+                    // if try reaches here without scriptnum_error
+                    // then vch1 is a valid bigint
+                    vSolutionsRet.push_back(vch1);
+                }
+                catch (scriptnum_error &)
+                {
+                    // the data is not a proper big int so this is not a match
+                    break;
+                } // end try/catch
+            }
             else if (opcode2 == OP_GRP_DATA)
             {
                 // Expect that there is some data in the script at this point
@@ -211,6 +234,9 @@ int ScriptSigArgsExpected(txnouttype t, const std::vector<std::vector<unsigned c
     case TX_PUBKEYHASH:
     case TX_GRP_PUBKEYHASH:
         return 2;
+    case TX_CLTV:
+    case TX_CSV:
+        return 3;
     case TX_MULTISIG:
         if (vSolutions.size() < 1 || vSolutions[0].size() < 1)
             return -1;
@@ -237,6 +263,8 @@ bool IsStandard(const CScript& scriptPubKey, txnouttype& whichType)
             return false;
         if (m < 1 || m > n)
             return false;
+    } else if (whichType == TX_CLTV || whichType == TX_CSV) {
+             return true;
     } else if (whichType == TX_NULL_DATA &&
                 (!GetBoolArg("-datacarrier", true) || scriptPubKey.size() > nMaxDatacarrierBytes))
         return false;
@@ -267,6 +295,15 @@ bool ExtractDestinationAndType(const CScript &scriptPubKey, CTxDestination &addr
     else if ((whichType == TX_SCRIPTHASH) || (whichType == TX_GRP_SCRIPTHASH))
     {
         addressRet = CScriptID(uint160(vSolutions[0]));
+        return true;
+    }
+    else if (whichType == TX_CLTV || whichType == TX_CSV)
+    {
+        CPubKey pubKey(vSolutions[1]);
+        if (!pubKey.IsValid())
+            return false;
+
+        addressRet = pubKey.GetID();
         return true;
     }
     // Multisig txns have more than one address...
@@ -364,6 +401,20 @@ CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys)
         script << ToByteVector(key);
     script << CScript::EncodeOP_N(keys.size()) << OP_CHECKMULTISIG;
     return script;
+}
+
+CScript GetScriptForFreezeLockTime(CScriptNum nFreezeLockTime, const CPubKey &pubKey)
+{
+    // TODO Perhaps add limit tests for nLockTime eg. 10 year max lock
+    return CScript() << nFreezeLockTime << OP_CHECKLOCKTIMEVERIFY << OP_DROP
+                     << std::vector<unsigned char>(pubKey.begin(), pubKey.end()) << OP_CHECKSIG;
+}
+
+CScript GetScriptForFreezeSequence(CScriptNum nFreezeLockTime, const CPubKey &pubKey)
+{
+    // TODO Perhaps add limit tests for nLockTime eg. 10 year max lock
+    return CScript() << nFreezeLockTime << OP_CHECKSEQUENCEVERIFY << OP_DROP
+                     << std::vector<unsigned char>(pubKey.begin(), pubKey.end()) << OP_CHECKSIG;
 }
 
 bool IsValidDestination(const CTxDestination& dest) {
