@@ -166,10 +166,10 @@ enum opcodetype
 
     // expansion
     OP_NOP1 = 0xb0,
-    OP_NOP2 = 0xb1,
-    OP_CHECKLOCKTIMEVERIFY = OP_NOP2,
-    OP_NOP3 = 0xb2,
-    OP_CHECKSEQUENCEVERIFY = OP_NOP3,
+    OP_CHECKLOCKTIMEVERIFY = 0xb1,
+    OP_NOP2 = OP_CHECKLOCKTIMEVERIFY,
+    OP_CHECKSEQUENCEVERIFY = 0xb2,
+    OP_NOP3 = OP_CHECKSEQUENCEVERIFY,
     OP_NOP4 = 0xb3,
     OP_NOP5 = 0xb4,
     OP_NOP6 = 0xb5,
@@ -184,6 +184,7 @@ enum opcodetype
     OP_ZEROCOINSPEND = 0xc2,
 
     // template matching params
+    OP_BIGINTEGER = 0xf0,
     OP_GRP_DATA = 0xf9,
     OP_SMALLINTEGER = 0xfa,
     OP_PUBKEYS = 0xfb,
@@ -309,7 +310,7 @@ public:
             return std::numeric_limits<int>::min();
         return m_value;
     }
-
+    int64_t getint64() const { return m_value; }
     std::vector<unsigned char> getvch() const
     {
         return serialize(m_value);
