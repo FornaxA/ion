@@ -67,6 +67,8 @@ enum txnouttype
     TX_PUBKEYHASH,
     TX_SCRIPTHASH,
     TX_MULTISIG,
+    TX_CLTV,
+    TX_CSV,
     TX_NULL_DATA,
     TX_ZEROCOINMINT,
     TX_GRP_PUBKEYHASH,
@@ -102,5 +104,7 @@ bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, std::
 
 CScript GetScriptForDestination(const CTxDestination& dest);
 CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys);
+CScript GetScriptForFreezeLockTime(CScriptNum nLockTime, const CPubKey& pubKey);
+CScript GetScriptForFreezeSequence(CScriptNum nLockTime, const CPubKey& pubKey);
 
 #endif // BITCOIN_SCRIPT_STANDARD_H

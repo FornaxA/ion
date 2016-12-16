@@ -2,6 +2,9 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include "base58.h" // Freeze CBitcoinAddress
+#include "chain.h" // Freeze CBlockIndex
+#include "dstencode.h"
 #include "key.h"
 #include "keystore.h"
 #include "main.h"
@@ -12,6 +15,7 @@
 #include "uint256.h"
 
 #ifdef ENABLE_WALLET
+#include "wallet.h"  // Freeze wallet test
 #include "wallet_ismine.h"
 #endif
 
@@ -214,8 +218,9 @@ BOOST_AUTO_TEST_CASE(multisig_Solver1)
         BOOST_CHECK(ExtractDestination(s, addr));
         BOOST_CHECK(addr == keyaddr[0]);
 #ifdef ENABLE_WALLET
-        BOOST_CHECK(IsMine(keystore, s));
-        BOOST_CHECK(!IsMine(emptykeystore, s));
+        CBlockIndex *nullBestBlock;
+        BOOST_CHECK(IsMine(keystore, s, nullBestBlock));
+        BOOST_CHECK(!IsMine(emptykeystore, s, nullBestBlock));
 #endif
     }
     {
@@ -229,8 +234,9 @@ BOOST_AUTO_TEST_CASE(multisig_Solver1)
         BOOST_CHECK(ExtractDestination(s, addr));
         BOOST_CHECK(addr == keyaddr[0]);
 #ifdef ENABLE_WALLET
-        BOOST_CHECK(IsMine(keystore, s));
-        BOOST_CHECK(!IsMine(emptykeystore, s));
+        CBlockIndex *nullBestBlock;
+        BOOST_CHECK(IsMine(keystore, s, nullBestBlock));
+        BOOST_CHECK(!IsMine(emptykeystore, s, nullBestBlock));
 #endif
     }
     {
@@ -243,9 +249,10 @@ BOOST_AUTO_TEST_CASE(multisig_Solver1)
         CTxDestination addr;
         BOOST_CHECK(!ExtractDestination(s, addr));
 #ifdef ENABLE_WALLET
-        BOOST_CHECK(IsMine(keystore, s));
-        BOOST_CHECK(!IsMine(emptykeystore, s));
-        BOOST_CHECK(!IsMine(partialkeystore, s));
+        CBlockIndex *nullBestBlock;
+        BOOST_CHECK(IsMine(keystore, s, nullBestBlock));
+        BOOST_CHECK(!IsMine(emptykeystore, s, nullBestBlock));
+        BOOST_CHECK(!IsMine(partialkeystore, s, nullBestBlock));
 #endif
     }
     {
@@ -262,9 +269,10 @@ BOOST_AUTO_TEST_CASE(multisig_Solver1)
         BOOST_CHECK(addrs[1] == keyaddr[1]);
         BOOST_CHECK(nRequired == 1);
 #ifdef ENABLE_WALLET
-        BOOST_CHECK(IsMine(keystore, s));
-        BOOST_CHECK(!IsMine(emptykeystore, s));
-        BOOST_CHECK(!IsMine(partialkeystore, s));
+        CBlockIndex *nullBestBlock;
+        BOOST_CHECK(IsMine(keystore, s, nullBestBlock));
+        BOOST_CHECK(!IsMine(emptykeystore, s, nullBestBlock));
+        BOOST_CHECK(!IsMine(partialkeystore, s, nullBestBlock));
 #endif
     }
     {
@@ -319,5 +327,58 @@ BOOST_AUTO_TEST_CASE(multisig_Sign)
     }
 }
 
+#ifdef ENABLE_WALLET
+BOOST_AUTO_TEST_CASE(cltv_freeze)
+{
+    CKey key[4];
+    for (int i = 0; i < 2; i++)
+        key[i].MakeNewKey(true);
+
+    // Create and unpack a CLTV script
+    vector<valtype> solutions;
+    txnouttype whichType;
+    vector<CTxDestination> addresses;
+    int nRequiredReturn;
+    txnouttype type = TX_CLTV;
+
+    // check cltv solve for block
+    CPubKey newKey1 = key[0].GetPubKey();
+    CTxDestination newAddr1 = CTxDestination(newKey1.GetID());
+    CScriptNum nFreezeLockTime(50000);
+    CScript s1 = GetScriptForFreezeLockTime(nFreezeLockTime, newKey1);
+
+    BOOST_CHECK(Solver(s1, whichType, solutions));
+    BOOST_CHECK(whichType == TX_CLTV);
+    BOOST_CHECK(solutions.size() == 2);
+    BOOST_CHECK(CScriptNum(solutions[0], false) == nFreezeLockTime);
+
+    nRequiredReturn = 0;
+    ExtractDestinations(s1, type, addresses, nRequiredReturn);
+
+    for (const CTxDestination &addr : addresses)
+        BOOST_CHECK(EncodeDestination(newAddr1) == EncodeDestination(addr));
+    BOOST_CHECK(nRequiredReturn == 1);
+
+
+    // check cltv solve for datetime
+    CPubKey newKey2 = key[0].GetPubKey();
+    CTxDestination newAddr2 = CTxDestination(newKey2.GetID());
+    nFreezeLockTime = CScriptNum(1482255731);
+    CScript s2 = GetScriptForFreezeLockTime(nFreezeLockTime, newKey2);
+
+    BOOST_CHECK(Solver(s2, whichType, solutions));
+    BOOST_CHECK(whichType == TX_CLTV);
+    BOOST_CHECK(solutions.size() == 2);
+    BOOST_CHECK(CScriptNum(solutions[0], false) == nFreezeLockTime);
+
+    nRequiredReturn = 0;
+    ExtractDestinations(s2, type, addresses, nRequiredReturn);
+
+    for (const CTxDestination &addr : addresses)
+        BOOST_CHECK(newAddr2 == addr);
+
+    BOOST_CHECK(nRequiredReturn == 1);
+}
+#endif
 
 BOOST_AUTO_TEST_SUITE_END()

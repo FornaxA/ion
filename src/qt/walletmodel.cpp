@@ -804,7 +804,7 @@ bool WalletModel::saveReceiveRequest(const std::string& sAddress, const int64_t 
 
 bool WalletModel::isMine(CTxDestination dest)
 {
-    return IsMine(*wallet, dest);
+    return IsMine(*wallet, dest, chainActive.Tip());
 }
 
 bool WalletModel::isUsed(CTxDestination dest)

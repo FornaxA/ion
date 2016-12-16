@@ -194,6 +194,44 @@ bool CWallet::LoadCScript(const CScript& redeemScript)
     return CCryptoKeyStore::AddCScript(redeemScript);
 }
 
+bool CWallet::LoadFreezeLockTimeScript(CPubKey newKey, CScriptNum nFreezeLockTime, std::string strLabel, std::string &address)
+{
+    // Template rpcdump.cpp::ImportAddress();
+
+    // Get Freeze Script
+    CScript freezeScript = GetScriptForFreezeLockTime(nFreezeLockTime, newKey);
+
+    // Test and Add Script to wallet
+    if (!this->HaveCScript(freezeScript) && !this->AddCScript(freezeScript))
+    {
+        LogPrintf("LoadFreezeLockTimeScript: Error adding p2sh freeze redeemScript to wallet. \n ");
+        return false;
+    }
+    // If just added then return P2SH for user
+    address = EncodeDestination(CScriptID(freezeScript));
+    LogPrintf("CLTV Freeze Script Load \n %s => %s \n ", freezeScript.ToString(), address.c_str());
+    return true;
+}
+
+bool CWallet::LoadFreezeSequenceScript(CPubKey newKey, CScriptNum nFreezeSequence, std::string strLabel, std::string &address)
+{
+    // Template rpcdump.cpp::ImportAddress();
+
+    // Get Freeze Script
+    CScript freezeScript = GetScriptForFreezeSequence(nFreezeSequence, newKey);
+
+    // Test and Add Script to wallet
+    if (!this->HaveCScript(freezeScript) && !this->AddCScript(freezeScript))
+    {
+        LogPrintf("LoadFreezeSequenceScript: Error adding p2sh freeze redeemScript to wallet. \n ");
+        return false;
+    }
+    // If just added then return P2SH for user
+    address = EncodeDestination(CScriptID(freezeScript));
+    LogPrintf("CSV Freeze Script Load \n %s => %s \n ", freezeScript.ToString(), address.c_str());
+    return true;
+}
+
 bool CWallet::AddWatchOnly(const CScript& dest)
 {
     if (!CCryptoKeyStore::AddWatchOnly(dest))
@@ -749,6 +787,8 @@ void CWallet::EraseFromWallet(const uint256& hash)
     return;
 }
 
+isminetype CWallet::IsMine(const CTxDestination &dest) const { return ::IsMine(*this, dest, chainActive.Tip()); }
+isminetype CWallet::IsMine(const CTxOut &txout) const { return ::IsMine(*this, txout.scriptPubKey, chainActive.Tip()); }
 isminetype CWallet::IsMine(const CTxIn& txin) const
 {
     {
@@ -763,11 +803,28 @@ isminetype CWallet::IsMine(const CTxIn& txin) const
     return ISMINE_NO;
 }
 
+bool CWallet::IsMine(const CTransaction &tx) const
+{
+    BOOST_FOREACH (const CTxOut &txout, tx.vout)
+    {
+        if (IsMine(txout) != ISMINE_NO)
+            return true;
+    }
+    return false;
+}
+
+CAmount CWallet::GetCredit(const CTxOut& txout, const isminefilter& filter) const
+{
+    if (!MoneyRange(txout.nValue))
+        throw std::runtime_error("CWallet::GetCredit() : value out of range");
+    return ((IsMine(txout) & filter) ? txout.nValue : 0);
+}
+
 bool CWallet::IsUsed(const CTxDestination dest) const
 {
     LOCK(cs_wallet);
     CScript scriptPubKey = GetScriptForDestination(dest);
-    if (!::IsMine(*this, scriptPubKey)) {
+    if (!::IsMine(*this, scriptPubKey, chainActive.Tip())) {
         return false;
     }
 
@@ -936,7 +993,7 @@ bool CWallet::IsChange(const CTxOut& txout) const
     // a better way of identifying which outputs are 'the send' and which are
     // 'the change' will need to be implemented (maybe extend CWalletTx to remember
     // which output, if any, was change).
-    if (::IsMine(*this, txout.scriptPubKey)) {
+    if (::IsMine(*this, txout.scriptPubKey, chainActive.Tip())) {
         CTxDestination address;
         if (!ExtractDestination(txout.scriptPubKey, address))
             return true;
@@ -3759,7 +3816,7 @@ bool CWallet::SetAddressBook(const CTxDestination& address, const string& strNam
         if (!strPurpose.empty()) /* update purpose only if requested */
             mapAddressBook[address].purpose = strPurpose;
     }
-    NotifyAddressBookChanged(this, address, strName, ::IsMine(*this, address) != ISMINE_NO,
+    NotifyAddressBookChanged(this, address, strName, ::IsMine(*this, address, chainActive.Tip()) != ISMINE_NO,
         strPurpose, (fUpdated ? CT_UPDATED : CT_NEW));
     if (!fFileBacked)
         return false;
@@ -3783,7 +3840,7 @@ bool CWallet::DelAddressBook(const CTxDestination& address)
         mapAddressBook.erase(address);
     }
 
-    NotifyAddressBookChanged(this, address, "", ::IsMine(*this, address) != ISMINE_NO, "", CT_DELETED);
+    NotifyAddressBookChanged(this, address, "", ::IsMine(*this, address, chainActive.Tip()) != ISMINE_NO, "", CT_DELETED);
 
     if (!fFileBacked)
         return false;
@@ -4162,7 +4219,7 @@ bool CWallet::IsLockedCoin(uint256 hash, unsigned int n) const
     return (setLockedCoins.count(outpt) > 0);
 }
 
-void CWallet::ListLockedCoins(std::vector<COutPoint>& vOutpts)
+void CWallet::ListLockedCoins(std::vector<COutPoint> &vOutpts)
 {
     AssertLockHeld(cs_wallet); // setLockedCoins
     for (std::set<COutPoint>::iterator it = setLockedCoins.begin();

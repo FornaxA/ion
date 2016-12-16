@@ -408,7 +408,7 @@ public:
     void LockCoin(const COutPoint& output);
     void UnlockCoin(const COutPoint& output);
     void UnlockAllCoins();
-    void ListLockedCoins(std::vector<COutPoint>& vOutpts);
+    void ListLockedCoins(std::vector<COutPoint> &vOutpts);
     CAmount GetTotalValue(std::vector<CTxIn> vCoins);
 
     //  keystore implementation
@@ -436,6 +436,8 @@ public:
     bool LoadCryptedKey(const CPubKey& vchPubKey, const std::vector<unsigned char>& vchCryptedSecret);
     bool AddCScript(const CScript& redeemScript);
     bool LoadCScript(const CScript& redeemScript);
+    bool LoadFreezeLockTimeScript(CPubKey newKey, CScriptNum nFreezeLockTime, std::string strLabel, std::string& address);
+    bool LoadFreezeSequenceScript(CPubKey newKey, CScriptNum nFreezeLockTime, std::string strLabel, std::string& address);
 
     //! Adds a destination data tuple to the store, and saves it to disk
     bool AddDestData(const CTxDestination& dest, const std::string& key, const std::string& value);
@@ -566,20 +568,16 @@ public:
 
     bool IsUsed(const CTxDestination dest) const;
 
-    isminetype IsMine(const CTxIn& txin) const;
-    CAmount GetDebit(const CTxIn& txin, const isminefilter& filter) const;
-    isminetype IsMine(const CTxOut& txout) const
-    {
-        return ::IsMine(*this, txout.scriptPubKey);
-    }
+    isminetype IsMine(const CTxIn &txin) const;
+    isminetype IsMine(const CTxOut &txout) const;
+    isminetype IsMine(const CTxDestination &dest) const;
+    bool IsMine(const CTransaction &tx) const;
+
+    CAmount GetDebit(const CTxIn &txin, const isminefilter &filter) const;
+    CAmount GetCredit(const CTxOut &txout, const isminefilter &filter) const;
+
     bool IsMyZerocoinSpend(const CBigNum& bnSerial) const;
     bool IsMyMint(const CBigNum& bnValue) const;
-    CAmount GetCredit(const CTxOut& txout, const isminefilter& filter) const
-    {
-        if (!MoneyRange(txout.nValue))
-            throw std::runtime_error("CWallet::GetCredit() : value out of range");
-        return ((IsMine(txout) & filter) ? txout.nValue : 0);
-    }
     bool IsChange(const CTxOut& txout) const;
     CAmount GetChange(const CTxOut& txout) const
     {
@@ -587,13 +585,7 @@ public:
             throw std::runtime_error("CWallet::GetChange() : value out of range");
         return (IsChange(txout) ? txout.nValue : 0);
     }
-    bool IsMine(const CTransaction& tx) const
-    {
-        BOOST_FOREACH (const CTxOut& txout, tx.vout)
-            if (IsMine(txout))
-                return true;
-        return false;
-    }
+
     /** should probably be renamed to IsRelevantToMe */
     bool IsFromMe(const CTransaction& tx) const
     {

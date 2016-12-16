@@ -247,7 +247,7 @@ bool MultisigDialog::addMultisig(int m, vector<string> keys){
             throw runtime_error(error.data());
         }
 
-        if (::IsMine(*pwalletMain, redeem) == ISMINE_SPENDABLE){
+        if (::IsMine(*pwalletMain, redeem, chainActive.Tip()) == ISMINE_SPENDABLE){
             throw runtime_error("The wallet already contains this script");
         }
 

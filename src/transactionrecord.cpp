@@ -76,7 +76,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
             //Masternode reward
             CTxDestination destMN;
             int nIndexMN = wtx.vout.size() - 1;
-            if (ExtractDestination(wtx.vout[nIndexMN].scriptPubKey, destMN) && IsMine(*wallet, destMN)) {
+            if (ExtractDestination(wtx.vout[nIndexMN].scriptPubKey, destMN) && IsMine(*wallet, destMN, chainActive.Tip())) {
                 isminetype mine = wallet->IsMine(wtx.vout[nIndexMN]);
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
                 sub.type = TransactionRecord::MNReward;
@@ -161,7 +161,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
                 sub.idx = parts.size(); // sequence number
                 sub.credit = txout.nValue;
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
-                if (ExtractDestination(txout.scriptPubKey, address) && IsMine(*wallet, address)) {
+                if (ExtractDestination(txout.scriptPubKey, address) && IsMine(*wallet, address, chainActive.Tip())) {
                     // Received by ION Address
                     sub.type = TransactionRecord::RecvWithAddress;
                     sub.address = EncodeDestination(address);
