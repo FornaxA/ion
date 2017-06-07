@@ -47,6 +47,7 @@
 
 class CBlockIndex;
 class CBlockTreeDB;
+class CCoinsViewDB;
 class CZerocoinDB;
 class CSporkDB;
 class CBloomFilter;
@@ -531,6 +532,9 @@ bool ReconsiderBlock(CValidationState& state, CBlockIndex* pindex);
 
 /** The currently-connected chain of blocks. */
 extern CChain chainActive;
+
+/** Global variable that points to the coins database (protected by cs_main) */
+extern CCoinsViewDB *pcoinsdbview;
 
 /** Global variable that points to the active CCoinsView (protected by cs_main) */
 extern CCoinsViewCache* pcoinsTip;
