@@ -27,7 +27,6 @@ extern bool fPrintToConsole;
 extern void noui_connect();
 
 struct TestingSetup {
-    CCoinsViewDB *pcoinsdbview;
     boost::filesystem::path pathTemp;
     boost::thread_group threadGroup;
     ECCVerifyHandle globalVerifyHandle;
@@ -45,9 +44,9 @@ struct TestingSetup {
         pathTemp = GetTempPath() / strprintf("test_ion_%lu_%i", (unsigned long)GetTime(), (int)(GetRand(100000)));
         boost::filesystem::create_directories(pathTemp);
         mapArgs["-datadir"] = pathTemp.string();
-        pblocktree = new CBlockTreeDB(1 << 20, true);
-        pcoinsdbview = new CCoinsViewDB(1 << 23, true);
-        pcoinsTip = new CCoinsViewCache(pcoinsdbview);
+        pblocktree.reset(new CBlockTreeDB(1 << 20, true));
+        pcoinsdbview.reset(new CCoinsViewDB(1 << 23, true));
+        pcoinsTip.reset(new CCoinsViewCache(pcoinsdbview.get()));
         InitBlockIndex();
 #ifdef ENABLE_WALLET
         bool fFirstRun;
@@ -69,9 +68,9 @@ struct TestingSetup {
         delete pwalletMain;
         pwalletMain = NULL;
 #endif
-        delete pcoinsTip;
-        delete pcoinsdbview;
-        delete pblocktree;
+        pcoinsTip.reset();
+        pcoinsdbview.reset();
+        pblocktree.reset();
 #ifdef ENABLE_WALLET
         bitdb.Flush(true);
 #endif

@@ -512,7 +512,7 @@ UniValue gettxoutsetinfo(const UniValue& params, bool fHelp)
 
     CCoinsStats stats;
     FlushStateToDisk();
-    if (GetUTXOStats(pcoinsdbview, stats)) {
+    if (GetUTXOStats(pcoinsdbview.get(), stats)) {
         ret.push_back(Pair("height", (int64_t)stats.nHeight));
         ret.push_back(Pair("bestblock", stats.hashBlock.GetHex()));
         ret.push_back(Pair("transactions", (int64_t)stats.nTransactions));
@@ -577,7 +577,7 @@ UniValue gettxout(const UniValue& params, bool fHelp)
     CCoins coins;
     if (fMempool) {
         LOCK(mempool.cs);
-        CCoinsViewMemPool view(pcoinsTip, mempool);
+        CCoinsViewMemPool view(pcoinsTip.get(), mempool);
         if (!view.GetCoins(hash, coins))
             return NullUniValue;
         mempool.pruneSpent(hash, coins); // TODO: this should be done by the CCoinsViewMemPool
@@ -629,7 +629,7 @@ UniValue verifychain(const UniValue& params, bool fHelp)
         nCheckDepth = params[0].get_int();
 
     fVerifyingBlocks = true;
-    bool fVerified = CVerifyDB().VerifyDB(pcoinsTip, nCheckLevel, nCheckDepth);
+    bool fVerified = CVerifyDB().VerifyDB(pcoinsTip.get(), nCheckLevel, nCheckDepth);
     fVerifyingBlocks = false;
 
     return fVerified;
