@@ -1112,3 +1112,37 @@ UniValue calculateaccumulatorvalues(const UniValue& params, bool fHelp)
 
     return ret;
 }
+
+//! Search for a given set of pubkey scripts
+bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::set<CScript>& needles, std::map<COutPoint, Coin>& out_results) {
+    scan_progress = 0;
+    count = 0;
+    while (cursor->Valid()) {
+        uint256 key;
+        CCoins coins;
+        if (!cursor->GetKey(key) || !cursor->GetValue(coins)) return false;
+        for (unsigned int i=0; i<coins.vout.size(); i++) {
+            const CTxOut &out = coins.vout[i];
+            if (!out.IsNull()) {
+                if (++count % 8192 == 0) {
+                    boost::this_thread::interruption_point();
+                    if (should_abort) {
+                        // allow to abort the scan via the abort reference
+                        return false;
+                    }
+                }
+                if (count % 256 == 0) {
+                    // update progress reference every 256 item
+                    uint32_t high = 0x100 * *key.begin() + *(key.begin() + 1);
+                    scan_progress = (int)(high * 100.0 / 65536.0 + 0.5);
+                }
+                if (needles.count(out.scriptPubKey)) {
+                    out_results.emplace(COutPoint(key, i), Coin(coins, i));
+                }
+            }
+        }
+        cursor->Next();
+    }
+    scan_progress = 100;
+    return true;
+}
