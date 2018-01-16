@@ -71,6 +71,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
         {"listsinceblock", 2},
         {"listrecordssinceblock", 1},
         {"listrecordssinceblock", 2},
+        {"scantxoutset", 1},
         {"sendmany", 1},
         {"sendmany", 2},
         {"sendmany", 4},
