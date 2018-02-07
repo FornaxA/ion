@@ -104,6 +104,7 @@ BITCOIN_CORE_H = \
   compat/endian.h \
   compat/sanity.h \
   compressor.h \
+  consensus/tokengroups.h \
   consensus/validation.h \
   core_memusage.h \
   dstencode.h \
@@ -212,6 +213,8 @@ libbitcoin_server_a_SOURCES = \
   blocksignature.cpp \
   chain.cpp \
   checkpoints.cpp \
+  consensus/tokengroups.h \
+  consensus/tokengroups.cpp \
   httprpc.cpp \
   httpserver.cpp \
   init.cpp \
