@@ -78,7 +78,6 @@ bool Solver(const CKeyStore& keystore, const CScript& scriptPubKey, uint256 hash
     case TX_ZEROCOINMINT:
         return false;
     case TX_PUBKEY:
-    case TX_GRP_PUBKEYHASH:
         keyID = CPubKey(vSolutions[0]).GetID();
         if(!Sign1(keyID, keystore, hash, nHashType, scriptSigRet))
         {
@@ -87,6 +86,7 @@ bool Solver(const CKeyStore& keystore, const CScript& scriptPubKey, uint256 hash
         }
         return true;
     case TX_PUBKEYHASH:
+    case TX_GRP_PUBKEYHASH:
         keyID = CKeyID(uint160(vSolutions[0]));
         if (!Sign1(keyID, keystore, hash, nHashType, scriptSigRet))
         {
@@ -100,8 +100,8 @@ bool Solver(const CKeyStore& keystore, const CScript& scriptPubKey, uint256 hash
             scriptSigRet << ToByteVector(vch);
         }
         return true;
-    case TX_GRP_SCRIPTHASH:
     case TX_SCRIPTHASH:
+    case TX_GRP_SCRIPTHASH:
         return keystore.GetCScript(uint160(vSolutions[0]), scriptSigRet);
 
     case TX_MULTISIG:
@@ -125,7 +125,7 @@ bool SignSignature(const CKeyStore &keystore, const CScript& fromPubKey, CMutabl
     if (!Solver(keystore, fromPubKey, hash, nHashType, txin.scriptSig, whichType))
         return false;
 
-    if (whichType == TX_SCRIPTHASH)
+    if ((whichType == TX_SCRIPTHASH) || (whichType == TX_GRP_SCRIPTHASH))
     {
         // Solver returns the subscript that need to be evaluated;
         // the final scriptSig is the signatures from that

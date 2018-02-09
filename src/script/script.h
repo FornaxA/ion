@@ -626,6 +626,7 @@ public:
     {
         return (size() > 0 && *begin() == OP_RETURN);
     }
+	/** Remove all instructions in this script. */
 
     std::string ToString() const;
     void clear()
