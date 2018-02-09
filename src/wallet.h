@@ -27,6 +27,7 @@
 #include "xiontracker.h"
 
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -385,8 +386,19 @@ public:
         return nWalletMaxVersion >= wf;
     }
 
+    /**
+     * populate vCoins with vector of available COutputs.
+     */
     void AvailableCoins(std::vector<COutput>& vCoins, bool fOnlyConfirmed = true, const CCoinControl* coinControl = NULL, bool fIncludeZeroValue = false, AvailableCoinsType nCoinType = ALL_COINS, bool fUseIX = false, int nWatchonlyConfig = 1) const;
     std::map<CTxDestination, std::vector<COutput> > AvailableCoinsByAddress(bool fConfirmed = true, CAmount maxCoinValue = 0);
+
+    /**
+     * populate vCoins with vector of available COutputs, filtered by the passed lambda function.
+       Returns the number of matches.
+     */
+    unsigned int FilterCoins(std::vector<COutput> &vCoins,
+        std::function<bool(const CWalletTx *, const CTxOut *)>) const;
+
     bool SelectCoinsMinConf(const CAmount& nTargetValue, int nConfMine, int nConfTheirs, std::vector<COutput> vCoins, std::set<std::pair<const CWalletTx*, unsigned int> >& setCoinsRet, CAmount& nValueRet) const;
 
     /// Get 1000DASH output and keys which can be used for the Masternode
@@ -492,6 +504,10 @@ public:
     CAmount GetLockedWatchOnlyBalance() const;
     bool FundTransaction(CMutableTransaction& tx, CAmount& nFeeRet, int& nChangePosInOut, std::string& strFailReason, bool lockUnspents, const std::set<int>& setSubtractFeeFromOutputs, CCoinControl* coinControl);
 //    bool FundTransaction(CMutableTransaction& tx, CAmount& nFeeRet, int& nChangePosRet, std::string& strFailReason);
+
+    /** Sign the provided transaction */
+    bool SignTransaction(CMutableTransaction &tx);
+
     bool CreateTransaction(const std::vector<CRecipient>& vecSend,
         CWalletTx& wtxNew,
         CReserveKey& reservekey,
@@ -703,19 +719,24 @@ protected:
     CPubKey vchPubKey;
 
 public:
+    /** Constructor does not reserve a key */
     CReserveKey(CWallet* pwalletIn)
     {
         nIndex = -1;
         pwallet = pwalletIn;
     }
 
+    /** Destructor returns the key if one has been reserved (and KeepKey was not called) */
     ~CReserveKey()
     {
         ReturnKey();
     }
 
+    /** Un-reserve the key -- its ok to call this if no key is currently reserved */
     void ReturnKey();
+    /** Get a new key from the wallet, or return the previously reserved key */
     bool GetReservedKey(CPubKey& pubkey);
+    /** Commit the key reservation, and this CReserveKey object resets to constucted state. */
     void KeepKey();
 };
 
@@ -1098,6 +1119,10 @@ public:
     }
 
     std::string ToString() const;
+    /** returns the outpoint associated with this object */
+    COutPoint GetOutPoint() const { return COutPoint(tx->GetHash(), i); }
+    /** returns the value of this output in satoshis */
+    CAmount GetValue() const { return tx->vout[i].nValue; }
 };
 
 
