@@ -184,6 +184,8 @@ public:
         nDGWStartHeight = 550000;                   // Startheight of DGW
         nDGWStartTime = 1521851265;                 // GMT: Saturday, March 24, 2018 12:27:45 AM - Exact time when DGW algorithm starts and old MIDAS stops
 
+        nOpGroupStartHeight = 99999999;
+
         /**
          * Build the genesis block. Note that the output of the genesis coinbase cannot
          * be spent as it did not originally exist in the database.
@@ -313,6 +315,8 @@ public:
         nMidasStartTime = 1497209344;
         nDGWStartHeight = nZerocoinStartHeight;
         nDGWStartTime = nZerocoinStartTime;
+
+        nOpGroupStartHeight = 500000;
 
         //! Modify the testnet genesis block so the timestamp is valid for a later start.
         const char* pszTimestamp = "The Guardian: [2nd Feb 2017] Finsbury Park mosque wins apology and damages from Thomson Reuters";
