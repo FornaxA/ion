@@ -132,6 +132,8 @@ public:
     int Zerocoin_Block_V2_Start() const { return nBlockZerocoinV2; }
     CAmount InvalidAmountFiltered() const { return nInvalidAmountFiltered; };
 
+    int OpGroup_StartHeight() const { return nOpGroupStartHeight; }
+
     int MidasStartHeight() const { return nMidasStartHeight;   }
     int MidasStartTime()   const { return nMidasStartTime;     }
     int DGWStartHeight()   const { return nDGWStartHeight;     }
@@ -202,6 +204,8 @@ protected:
     int nBlockLastGoodCheckpoint;
     int nBlockEnforceInvalidUTXO;
     int nBlockZerocoinV2;
+
+    int nOpGroupStartHeight;
 
     int nMidasStartHeight;
     int nMidasStartTime;

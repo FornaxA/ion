@@ -192,6 +192,7 @@ BITCOIN_CORE_H = \
   wallet.h \
   wallet_ismine.h \
   walletdb.h \
+  wallet/tokengroupwallet.h \
   xionchain.h \
   xiontracker.h \
   xionwallet.h \
@@ -285,6 +286,7 @@ libbitcoin_wallet_a_SOURCES = \
   wallet.cpp \
   wallet_ismine.cpp \
   walletdb.cpp \
+  wallet/tokengroupwallet.cpp \
   xionwallet.cpp \
   xiontracker.cpp \
   stakeinput.cpp \
