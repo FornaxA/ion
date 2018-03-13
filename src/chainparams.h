@@ -139,6 +139,8 @@ public:
 
     CAmount InvalidAmountFiltered() const { return nInvalidAmountFiltered; };
 
+    int OpGroup_StartHeight() const { return nOpGroupStartHeight; }
+
     int MidasStartHeight() const { return nMidasStartHeight;   }
     int64_t MidasStartTime()   const { return nMidasStartTime;     }
     int DGWStartHeight()   const { return nDGWStartHeight;     }
@@ -210,6 +212,8 @@ protected:
     int nBlockLastGoodCheckpoint;
     int nBlockEnforceInvalidUTXO;
     int nBlockZerocoinV2;
+
+    int nOpGroupStartHeight;
 
     // fake serial attack
     int nFakeSerialBlockheightEnd = 0;

@@ -168,6 +168,8 @@ public:
         nDGWStartHeight = 550000;                   // Startheight of DGW
         nDGWStartTime = 1521851265;                 // GMT: Saturday, March 24, 2018 12:27:45 AM - Exact time when DGW algorithm starts and old MIDAS stops
 
+        nOpGroupStartHeight = 99999999;
+
         // Fake Serial Attack
         nFakeSerialBlockheightEnd = 1073534;
         nSupplyBeforeFakeSerial = 1308446 * COIN;   // zerocoin supply at block nFakeSerialBlockheightEnd
@@ -302,6 +304,8 @@ public:
         nMidasStartTime = 253402300799;
         nDGWStartHeight = nZerocoinStartHeight;
         nDGWStartTime = nZerocoinStartTime;
+
+        nOpGroupStartHeight = 1;
 
         // Fake Serial Attack
         nFakeSerialBlockheightEnd = -1;
