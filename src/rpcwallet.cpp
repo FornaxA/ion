@@ -14,6 +14,7 @@
 #include "netbase.h"
 #include "rpc/server.h"
 #include "timedata.h"
+#include "wallet/tokengroupwallet.h"
 #include "transactionrecord.h"
 #include "util.h"
 #include "utilmoneystr.h"
@@ -1338,8 +1339,8 @@ void ListTransactions(const CWalletTx& wtx, const string& strAccount, int nMinDe
 {
     CAmount nFee;
     string strSentAccount;
-    list<COutputEntry> listReceived;
-    list<COutputEntry> listSent;
+    list<CGroupedOutputEntry> listReceived;
+    list<CGroupedOutputEntry> listSent;
 
     wtx.GetAmounts(listReceived, listSent, nFee, strSentAccount, filter);
 
@@ -1348,7 +1349,7 @@ void ListTransactions(const CWalletTx& wtx, const string& strAccount, int nMinDe
 
     // Sent
     if ((!listSent.empty() || nFee != 0) && (fAllAccounts || strAccount == strSentAccount)) {
-        BOOST_FOREACH (const COutputEntry& s, listSent) {
+        BOOST_FOREACH (const CGroupedOutputEntry& s, listSent) {
             UniValue entry(UniValue::VOBJ);
             if (involvesWatchonly || (::IsMine(*pwalletMain, s.destination) & ISMINE_WATCH_ONLY))
                 entry.push_back(Pair("involvesWatchonly", true));
@@ -1356,6 +1357,11 @@ void ListTransactions(const CWalletTx& wtx, const string& strAccount, int nMinDe
             MaybePushAddress(entry, s.destination);
             std::map<std::string, std::string>::const_iterator it = wtx.mapValue.find("DS");
             entry.push_back(Pair("category", (it != wtx.mapValue.end() && it->second == "1") ? "darksent" : "send"));
+            if (s.grp != NoGroup)
+            {
+                entry.push_back(Pair("group", EncodeTokenGroup(s.grp)));
+                entry.push_back(Pair("groupAmount", -s.grpAmount));
+            }
             entry.push_back(Pair("amount", ValueFromAmount(-s.amount)));
             entry.push_back(Pair("vout", s.vout));
             entry.push_back(Pair("fee", ValueFromAmount(-nFee)));
@@ -1367,7 +1373,7 @@ void ListTransactions(const CWalletTx& wtx, const string& strAccount, int nMinDe
 
     // Received
     if (listReceived.size() > 0 && wtx.GetDepthInMainChain() >= nMinDepth) {
-        BOOST_FOREACH (const COutputEntry& r, listReceived) {
+        BOOST_FOREACH (const CGroupedOutputEntry& r, listReceived) {
             string account;
             if (pwalletMain->mapAddressBook.count(r.destination))
                 account = pwalletMain->mapAddressBook[r.destination].name;
@@ -1386,6 +1392,11 @@ void ListTransactions(const CWalletTx& wtx, const string& strAccount, int nMinDe
                         entry.push_back(Pair("category", "generate"));
                 } else {
                     entry.push_back(Pair("category", "receive"));
+                }
+                if (r.grp != NoGroup)
+                {
+                    entry.push_back(Pair("group", EncodeTokenGroup(r.grp)));
+                    entry.push_back(Pair("groupAmount", r.grpAmount));
                 }
                 entry.push_back(Pair("amount", ValueFromAmount(r.amount)));
                 entry.push_back(Pair("vout", r.vout));
@@ -1902,11 +1913,13 @@ UniValue gettransaction(const UniValue& params, bool fHelp)
             "  \"timereceived\" : ttt,    (numeric) The time received in seconds since epoch (1 Jan 1970 GMT)\n"
             "  \"details\" : [\n"
             "    {\n"
+            "      \"group\": \"groupidentifier\", (string) The token identifier (appears only if applicable)\n"
+            "      \"groupAmount\": n,             (numeric) The token quantity (appears only if applicable)\n"
             "      \"account\" : \"accountname\",  (string) The account name involved in the transaction, can be \"\" for the default account.\n"
             "      \"address\" : \"ionaddress\",   (string) The ion address involved in the transaction\n"
-            "      \"category\" : \"send|receive\",    (string) The category, either 'send' or 'receive'\n"
-            "      \"amount\" : x.xxx                  (numeric) The amount in ION\n"
-            "      \"vout\" : n,                       (numeric) the vout value\n"
+            "      \"category\" : \"send|receive\",(string) The category, either 'send' or 'receive'\n"
+            "      \"amount\" : x.xxx              (numeric) The amount in ION\n"
+            "      \"vout\" : n,                   (numeric) the vout value\n"
             "    }\n"
             "    ,...\n"
             "  ],\n"
