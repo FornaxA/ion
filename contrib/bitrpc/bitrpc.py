@@ -219,31 +219,31 @@ elif cmd == "listtransactions":
     except:
         print "\n---An error occurred---\n"
 
-#elif cmd == "listtransactionrecords":
-#    try:
-#        acct = raw_input("Account (optional): ")
-#        count = raw_input("Number of transactions (optional): ")
-#        frm = raw_input("Skip (optional):")
-#        try:
-#            print access.listtransactionrecords(acct, count, frm)
-#        except:
-#            print access.listtransactionrecords()
-#    except:
-#        print "\n---An error occurred---\n"
-#
-#elif cmd == "move":
-#    try:
-#        frm = raw_input("From: ")
-#        to = raw_input("To: ")
-#        amt = raw_input("Amount:")
-#        mc = raw_input("Minimum confirmations (optional): ")
-#        comment = raw_input("Comment (optional): ")
-#        try:
-#            print access.move(frm, to, amt, mc, comment)
-#        except:
-#            print access.move(frm, to, amt)
-#    except:
-#        print "\n---An error occurred---\n"
+elif cmd == "listtransactionrecords":
+    try:
+        acct = raw_input("Account (optional): ")
+        count = raw_input("Number of transactions (optional): ")
+        frm = raw_input("Skip (optional):")
+        try:
+            print access.listtransactionrecords(acct, count, frm)
+        except:
+            print access.listtransactionrecords()
+    except:
+        print "\n---An error occurred---\n"
+
+elif cmd == "move":
+    try:
+        frm = raw_input("From: ")
+        to = raw_input("To: ")
+        amt = raw_input("Amount:")
+        mc = raw_input("Minimum confirmations (optional): ")
+        comment = raw_input("Comment (optional): ")
+        try:
+            print access.move(frm, to, amt, mc, comment)
+        except:
+            print access.move(frm, to, amt)
+    except:
+        print "\n---An error occurred---\n"
 
 elif cmd == "sendfrom":
     try:
