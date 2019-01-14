@@ -426,7 +426,7 @@ void ConstructTx(CWalletTx &wtxNew,
 
         // Add another input for the bitcoin used for the fee
         // this ignores the additional change output
-        approxSize += inpSize;
+        approxSize += inpSize * 3;
 
         // Now add bitcoin fee
         CAmount fee = wallet->GetRequiredFee(approxSize);
