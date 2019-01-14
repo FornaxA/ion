@@ -847,40 +847,6 @@ extern UniValue token(const UniValue &params, bool fHelp)
 
         unsigned int curparam = 1;
 
-        // CCoinControl coinControl;
-        // coinControl.fAllowOtherInputs = true; // Allow a normal bitcoin input for change
-        COutput coin(nullptr, 0, 0, false);
-
-        {
-            std::vector<COutput> coins;
-            CAmount lowest = Params().MaxMoneyOut();
-            wallet->FilterCoins(coins, [&lowest](const CWalletTx *tx, const CTxOut *out) {
-                CTokenGroupInfo tg(out->scriptPubKey);
-                // although its possible to spend a grouped input to produce
-                // a single mint group, I won't allow it to make the tx construction easier.
-                if ((tg.associatedGroup == NoGroup) && (out->nValue < lowest))
-                {
-                    lowest = out->nValue;
-                    return true;
-                }
-                return false;
-            });
-
-            if (0 == coins.size())
-            {
-                throw JSONRPCError(RPC_INVALID_PARAMS, "No coins available in the wallet");
-            }
-            coin = coins[coins.size() - 1];
-        }
-
-        uint64_t grpNonce = 0;
-        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), TokenGroupIdFlags::NONE, grpNonce);
-
-        std::vector<COutput> chosenCoins;
-        chosenCoins.push_back(coin);
-
-        std::vector<CRecipient> outputs;
-
         CReserveKey authKeyReservation(wallet);
         CTxDestination authDest;
         if (curparam >= params.size())
@@ -897,6 +863,91 @@ extern UniValue token(const UniValue &params, bool fHelp)
                 throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: no authority address");
             }
         }
+
+        COutPoint mintInput = COutPoint();
+
+        curparam++;
+
+        if (curparam < params.size())
+        {
+            UniValue inputs = params[curparam].get_array();
+
+            for (unsigned int idx = 0; idx < inputs.size(); idx++)
+            {
+                const UniValue &input = inputs[idx];
+                const UniValue &o = input.get_obj();
+
+                uint256 txid = ParseHashO(o, "txid");
+
+                const UniValue &vout_v = find_value(o, "vout");
+                if (!vout_v.isNum())
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, missing vout key");
+                int nOutput = vout_v.get_int();
+                if (nOutput < 0)
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, vout must be positive");
+
+                mintInput = COutPoint(txid, nOutput);
+            }
+
+        }
+
+        // CCoinControl coinControl;
+        // coinControl.fAllowOtherInputs = true; // Allow a normal bitcoin input for change
+        COutput coin(nullptr, 0, 0, false);
+
+        {
+            std::vector<COutput> coins;
+            CAmount lowest = Params().MaxMoneyOut();
+            wallet->FilterCoins(coins, [&lowest, mintInput](const CWalletTx *tx, const CTxOut *out) {
+                CTokenGroupInfo tg(out->scriptPubKey);
+                // although its possible to spend a grouped input to produce
+                // a single mint group, I won't allow it to make the tx construction easier.
+                if ((tg.associatedGroup == NoGroup))
+                {
+                    if (mintInput.IsNull())
+                    {
+                        if ((out->nValue < lowest))
+                        {
+                            lowest = out->nValue;
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        if (mintInput.hash == tx->GetHash())
+                        {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            });
+
+            if (0 == coins.size())
+            {
+                throw JSONRPCError(RPC_INVALID_PARAMS, "No coins available in the wallet");
+            }
+
+            coin = coins[coins.size() - 1];
+
+            if (!mintInput.IsNull())
+            {
+                for (unsigned int i = 0; i < coins.size(); i++)
+                {
+                    if (coins.at(i).GetOutPoint() == mintInput)
+                        coin = coins.at(i);
+                }
+            }
+        }
+
+        uint64_t grpNonce = 0;
+        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), TokenGroupIdFlags::NONE, grpNonce);
+
+        std::vector<COutput> chosenCoins;
+        chosenCoins.push_back(coin);
+
+        std::vector<CRecipient> outputs;
+
         CScript script = GetScriptForDestination(authDest, grpID, (CAmount)GroupAuthorityFlags::ALL | grpNonce);
         CRecipient recipient = {script, GROUPED_SATOSHI_AMT, false};
         outputs.push_back(recipient);
