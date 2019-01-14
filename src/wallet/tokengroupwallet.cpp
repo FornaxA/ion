@@ -162,9 +162,15 @@ void GetAllGroupBalances(const CWallet *wallet, std::unordered_map<CTokenGroupID
         if (tg.associatedGroup != NoGroup) // must be sitting in any group address
         {
             if (tg.quantity > std::numeric_limits<CAmount>::max() - balances[tg.associatedGroup])
+            {
                 balances[tg.associatedGroup] = std::numeric_limits<CAmount>::max();
-            else
+            }
+            else if (tg.quantity < 0)
+            {
+                // from the perspective of balances, a controller utxo is empty so nothing to add here
+            } else {
                 balances[tg.associatedGroup] += tg.quantity;
+            }
         }
         return false; // I don't want to actually filter anything
     });
