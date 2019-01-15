@@ -132,7 +132,9 @@ public:
     int Zerocoin_Block_V2_Start() const { return nBlockZerocoinV2; }
     CAmount InvalidAmountFiltered() const { return nInvalidAmountFiltered; };
 
+    /** Tokens and DarkMatter **/
     int OpGroup_StartHeight() const { return nOpGroupStartHeight; }
+    std::string DarkMatterGroup() const { return strDarkMatterGroup; }
 
     int MidasStartHeight() const { return nMidasStartHeight;   }
     int MidasStartTime()   const { return nMidasStartTime;     }
@@ -206,6 +208,7 @@ protected:
     int nBlockZerocoinV2;
 
     int nOpGroupStartHeight;
+    std::string strDarkMatterGroup;
 
     int nMidasStartHeight;
     int nMidasStartTime;
