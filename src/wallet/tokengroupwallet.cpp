@@ -1103,7 +1103,7 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
 
     UniValue params(UniValue::VARR);
     params.push_back(paramsIn[0]);
-    params.push_back("tion1z0hxqegnter2g7mjexea65sfqy7wm0uwxexcxsvf5njwd63w8qrqqxwd8cc");
+    params.push_back(Params().DarkMatterGroup());
     for (unsigned int i=1; i < paramsIn.size(); i++)
     {
         params.push_back(paramsIn[i]);
