@@ -844,8 +844,462 @@ extern UniValue token(const UniValue &params, bool fHelp)
     else if (operation == "new")
     {
         LOCK2(cs_main, wallet->cs_wallet);
-
         unsigned int curparam = 1;
+
+        // CCoinControl coinControl;
+        // coinControl.fAllowOtherInputs = true; // Allow a normal bitcoin input for change
+        COutput coin(nullptr, 0, 0, false);
+
+        {
+            std::vector<COutput> coins;
+            CAmount lowest = Params().MaxMoneyOut();
+            wallet->FilterCoins(coins, [&lowest](const CWalletTx *tx, const CTxOut *out) {
+                CTokenGroupInfo tg(out->scriptPubKey);
+                // although its possible to spend a grouped input to produce
+                // a single mint group, I won't allow it to make the tx construction easier.
+                if ((tg.associatedGroup == NoGroup) && (out->nValue < lowest))
+                {
+                    lowest = out->nValue;
+                    return true;
+                }
+                return false;
+            });
+
+            if (0 == coins.size())
+            {
+                throw JSONRPCError(RPC_INVALID_PARAMS, "No coins available in the wallet");
+            }
+            coin = coins[coins.size() - 1];
+        }
+
+        uint64_t grpNonce = 0;
+        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), TokenGroupIdFlags::NONE, grpNonce);
+
+        std::vector<COutput> chosenCoins;
+        chosenCoins.push_back(coin);
+
+        std::vector<CRecipient> outputs;
+
+        CReserveKey authKeyReservation(wallet);
+        CTxDestination authDest;
+        if (curparam >= params.size())
+        {
+            CPubKey authKey;
+            authKeyReservation.GetReservedKey(authKey);
+            authDest = authKey.GetID();
+        }
+        else
+        {
+            authDest = DecodeDestination(params[curparam].get_str(), Params());
+            if (authDest == CTxDestination(CNoDestination()))
+            {
+                throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: no authority address");
+            }
+        }
+        CScript script = GetScriptForDestination(authDest, grpID, (CAmount)GroupAuthorityFlags::ALL | grpNonce);
+        CRecipient recipient = {script, GROUPED_SATOSHI_AMT, false};
+        outputs.push_back(recipient);
+
+        CWalletTx wtx;
+        ConstructTx(wtx, chosenCoins, outputs, coin.GetValue(), 0, 0, 0, grpID, wallet);
+        authKeyReservation.KeepKey();
+        UniValue ret(UniValue::VOBJ);
+        ret.push_back(Pair("groupIdentifier", EncodeTokenGroup(grpID)));
+        ret.push_back(Pair("transaction", wtx.GetHash().GetHex()));
+        return ret;
+    }
+
+
+    else if (operation == "mint")
+    {
+        LOCK(cs_main); // to maintain locking order
+        LOCK(wallet->cs_wallet); // because I am reserving UTXOs for use in a tx
+        CTokenGroupID grpID;
+        CAmount totalTokensNeeded = 0;
+        CAmount totalBchNeeded = GROUPED_SATOSHI_AMT; // for the mint destination output
+        unsigned int curparam = 1;
+        std::vector<CRecipient> outputs;
+        // Get data from the parameter line. this fills grpId and adds 1 output for the correct # of tokens
+        curparam = ParseGroupAddrValue(params, curparam, grpID, outputs, totalTokensNeeded, true);
+
+        if (outputs.empty())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "No destination address or payment amount");
+        }
+        if (curparam != params.size())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Improper number of parameters, did you forget the payment amount?");
+        }
+
+        CCoinControl coinControl;
+        coinControl.fAllowOtherInputs = true; // Allow a normal bitcoin input for change
+        std::string strError;
+
+        // Now find a mint authority
+        std::vector<COutput> coins;
+        int nOptions = wallet->FilterCoins(coins, [grpID](const CWalletTx *tx, const CTxOut *out) {
+            CTokenGroupInfo tg(out->scriptPubKey);
+            if ((tg.associatedGroup == grpID) && tg.allowsMint())
+            {
+                return true;
+            }
+            return false;
+        });
+
+        // if its a subgroup look for a parent authority that will work
+        // As an idiot-proofing step, we only allow parent authorities that can be renewed, but that is a
+        // preference coded in this wallet, not a group token requirement.
+        if ((nOptions == 0) && (grpID.isSubgroup()))
+        {
+            // if its a subgroup look for a parent authority that will work
+            nOptions = wallet->FilterCoins(coins, [grpID](const CWalletTx *tx, const CTxOut *out) {
+                CTokenGroupInfo tg(out->scriptPubKey);
+                if (tg.isAuthority() && tg.allowsRenew() && tg.allowsSubgroup() && tg.allowsMint() &&
+                    (tg.associatedGroup == grpID.parentGroup()))
+                {
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        if (nOptions == 0)
+        {
+            strError = _("To mint coins, an authority output with mint capability is needed.");
+            throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, strError);
+        }
+        CAmount totalBchAvailable = 0;
+        COutput authority(nullptr, 0, 0, false);
+
+        // Just pick the first one for now.
+        for (auto coin : coins)
+        {
+            totalBchAvailable += coin.tx->vout[coin.i].nValue;
+            authority = coin;
+            break;
+        }
+
+        std::vector<COutput> chosenCoins;
+        chosenCoins.push_back(authority);
+
+        CReserveKey childAuthorityKey(wallet);
+        totalBchNeeded += RenewAuthority(authority, outputs, childAuthorityKey);
+
+        CWalletTx wtx;
+        // I don't "need" tokens even though they are in the output because I'm minting, which is why
+        // the token quantities are 0
+        ConstructTx(wtx, chosenCoins, outputs, totalBchAvailable, totalBchNeeded, 0, 0, grpID, wallet);
+        childAuthorityKey.KeepKey();
+        return wtx.GetHash().GetHex();
+    }
+    else if (operation == "balance")
+    {
+        if (params.size() > 3)
+        {
+            throw std::runtime_error("Invalid number of argument to token balance");
+        }
+        if (params.size() == 1) // no group specified, show them all
+        {
+            std::unordered_map<CTokenGroupID, CAmount> balances;
+            GetAllGroupBalances(wallet, balances);
+            UniValue ret(UniValue::VOBJ);
+            for (const auto &item : balances)
+            {
+                ret.push_back(Pair(EncodeTokenGroup(item.first), item.second));
+            }
+            return ret;
+        }
+        CTokenGroupID grpID = GetTokenGroup(params[1].get_str());
+        if (!grpID.isUserGroup())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter 1: No group specified");
+        }
+        CTxDestination dst;
+        if (params.size() > 2)
+        {
+            dst = DecodeDestination(params[2].get_str(), Params());
+        }
+        return UniValue(GetGroupBalance(grpID, dst, wallet));
+    }
+    else if (operation == "send")
+    {
+        CTokenGroupID grpID;
+        CAmount totalTokensNeeded = 0;
+        unsigned int curparam = 1;
+        std::vector<CRecipient> outputs;
+        curparam = ParseGroupAddrValue(params, curparam, grpID, outputs, totalTokensNeeded, true);
+
+        if (outputs.empty())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "No destination address or payment amount");
+        }
+        if (curparam != params.size())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Improper number of parameters, did you forget the payment amount?");
+        }
+        CWalletTx wtx;
+        GroupSend(wtx, grpID, outputs, totalTokensNeeded, wallet);
+        return wtx.GetHash().GetHex();
+    }
+    else if (operation == "melt")
+    {
+        CTokenGroupID grpID;
+        std::vector<CRecipient> outputs;
+
+        grpID = GetTokenGroup(params[1].get_str());
+        if (!grpID.isUserGroup())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: No group specified");
+        }
+
+        CAmount totalNeeded = AmountFromIntegralValue(params[2]);
+
+        CWalletTx wtx;
+        GroupMelt(wtx, grpID, totalNeeded, wallet);
+        return wtx.GetHash().GetHex();
+    }
+    else
+    {
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Unknown group operation");
+    }
+    return NullUniValue;
+}
+
+extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
+{
+    CWallet *wallet = pwalletMain;
+    if (!pwalletMain)
+        return NullUniValue;
+
+    if (fHelp || paramsIn.size() < 1)
+        throw std::runtime_error(
+            "token [new, mint, melt, send] \n"
+            "\nToken functions.\n"
+            "'new' creates a new token type. args: authorityAddress\n"
+            "'mint' creates new tokens. args: groupId address quantity\n"
+            "'melt' removes tokens from circulation. args: groupId quantity\n"
+            "'balance' reports quantity of this token. args: groupId [address]\n"
+            "'send' sends tokens to a new address. args: groupId address quantity [address quantity...]\n"
+            "'authority create' creates a new authority args: groupId address [mint melt nochild rescript]\n"
+            "'subgroup' translates a group and additional data into a subgroup identifier. args: groupId data\n"
+            "\nArguments:\n"
+            "1. \"address\"     (string, required) the destination address\n"
+            "2. \"quantity\"    (numeric, required) the quantity desired\n"
+            "3. \"data\"        (number, 0xhex, or string) binary data\n"
+            "\nResult:\n"
+            "\n"
+            "\nExamples:\n"
+            "\nCreate a transaction with no inputs\n" +
+            HelpExampleCli("createrawtransaction", "\"[]\" \"{\\\"myaddress\\\":0.01}\"") +
+            "\nAdd sufficient unsigned inputs to meet the output value\n" +
+            HelpExampleCli("fundrawtransaction", "\"rawtransactionhex\"") + "\nSign the transaction\n" +
+            HelpExampleCli("signrawtransaction", "\"fundedtransactionhex\"") + "\nSend the transaction\n" +
+            HelpExampleCli("sendrawtransaction", "\"signedtransactionhex\""));
+
+    std::string operation;
+    std::string p0 = paramsIn[0].get_str();
+    std::transform(p0.begin(), p0.end(), std::back_inserter(operation), ::tolower);
+    EnsureWalletIsUnlocked();
+
+    UniValue params(UniValue::VARR);
+    params.push_back(paramsIn[0]);
+    params.push_back("tion1z0hxqegnter2g7mjexea65sfqy7wm0uwxexcxsvf5njwd63w8qrqqxwd8cc");
+    for (unsigned int i=1; i < paramsIn.size(); i++)
+    {
+        params.push_back(paramsIn[i]);
+    }
+
+    if (operation == "listsinceblock")
+    {
+        return groupedlistsinceblock(params, fHelp);
+    }
+    if (operation == "listtransactions")
+    {
+        return groupedlisttransactions(params, fHelp);
+    }
+    if (operation == "subgroup")
+    {
+        unsigned int curparam = 1;
+        if (curparam >= params.size())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Missing parameters");
+        }
+        CTokenGroupID grpID;
+        std::vector<unsigned char> postfix;
+        // Get the group id from the command line
+        grpID = GetTokenGroup(params[curparam].get_str());
+        if (!grpID.isUserGroup())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: No group specified");
+        }
+        curparam++;
+
+        int64_t postfixNum = 0;
+        bool isNum = false;
+        if (params[curparam].isNum())
+        {
+            postfixNum = params[curparam].get_int64();
+            isNum = true;
+        }
+        else // assume string
+        {
+            std::string postfixStr = params[curparam].get_str();
+            if ((postfixStr[0] == '0') && (postfixStr[0] == 'x'))
+            {
+                throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: Hex not implemented yet");
+            }
+            try
+            {
+                postfixNum = boost::lexical_cast<int64_t>(postfixStr);
+                isNum = true;
+            }
+            catch (const boost::bad_lexical_cast &)
+            {
+                for (unsigned int i = 0; i < postfixStr.size(); i++)
+                    postfix.push_back(postfixStr[i]);
+            }
+        }
+
+        if (isNum)
+        {
+            CDataStream ss(0, 0);
+            uint64_t xSize = postfixNum;
+            WRITEDATA(ss, xSize);
+//            ser_writedata64(ss, postfixNum);
+            for (auto c : ss)
+                postfix.push_back(c);
+        }
+
+        if (postfix.size() == 0)
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: no subgroup postfix provided");
+        }
+        std::vector<unsigned char> subgroupbytes(grpID.bytes().size() + postfix.size());
+        unsigned int i;
+        for (i = 0; i < grpID.bytes().size(); i++)
+        {
+            subgroupbytes[i] = grpID.bytes()[i];
+        }
+        for (unsigned int j = 0; j < postfix.size(); j++, i++)
+        {
+            subgroupbytes[i] = postfix[j];
+        }
+        CTokenGroupID subgrpID(subgroupbytes);
+        return EncodeTokenGroup(subgrpID);
+    }
+    else if (operation == "authority")
+    {
+        LOCK2(cs_main, wallet->cs_wallet);
+        CAmount totalBchNeeded = 0;
+        CAmount totalBchAvailable = 0;
+        unsigned int curparam = 1;
+        std::vector<COutput> chosenCoins;
+        std::vector<CRecipient> outputs;
+        if (curparam >= params.size())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Missing parameters");
+        }
+        std::string suboperation;
+        std::string p1 = params[curparam].get_str();
+        std::transform(p1.begin(), p1.end(), std::back_inserter(suboperation), ::tolower);
+        curparam++;
+        if (suboperation == "create")
+        {
+            CTokenGroupID grpID;
+            GroupAuthorityFlags auth = GroupAuthorityFlags();
+            // Get the group id from the command line
+            grpID = GetTokenGroup(params[curparam].get_str());
+            if (!grpID.isUserGroup())
+            {
+                throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: No group specified");
+            }
+
+            // Get the destination address from the command line
+            curparam++;
+            CTxDestination dst = DecodeDestination(params[curparam].get_str(), Params());
+            if (dst == CTxDestination(CNoDestination()))
+            {
+                throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: destination address");
+            }
+
+            // Get what authority permissions the user wants from the command line
+            curparam++;
+            if (curparam < params.size()) // If flags are not specified, we dup existing flags.
+            {
+                auth = ParseAuthorityParams(params, curparam);
+                if (curparam < params.size())
+                {
+                    std::string strError;
+                    strError = strprintf("Invalid parameter: flag %s", params[curparam].get_str());
+                    throw JSONRPCError(RPC_INVALID_PARAMS, strError);
+                }
+            }
+
+            // Now find a compatible authority
+            std::vector<COutput> coins;
+            int nOptions = wallet->FilterCoins(coins, [auth, grpID](const CWalletTx *tx, const CTxOut *out) {
+                CTokenGroupInfo tg(out->scriptPubKey);
+                if ((tg.associatedGroup == grpID) && tg.isAuthority() && tg.allowsRenew())
+                {
+                    // does this authority have at least the needed bits set?
+                    if ((tg.controllingGroupFlags & auth) == auth)
+                        return true;
+                }
+                return false;
+            });
+
+            // if its a subgroup look for a parent authority that will work
+            if ((nOptions == 0) && (grpID.isSubgroup()))
+            {
+                // if its a subgroup look for a parent authority that will work
+                nOptions = wallet->FilterCoins(coins, [auth, grpID](const CWalletTx *tx, const CTxOut *out) {
+                    CTokenGroupInfo tg(out->scriptPubKey);
+                    if (tg.isAuthority() && tg.allowsRenew() && tg.allowsSubgroup() &&
+                        (tg.associatedGroup == grpID.parentGroup()))
+                    {
+                        if ((tg.controllingGroupFlags & auth) == auth)
+                            return true;
+                    }
+                    return false;
+                });
+            }
+
+            if (nOptions == 0) // TODO: look for multiple authorities that can be combined to form the required bits
+            {
+                throw JSONRPCError(RPC_INVALID_PARAMS, "No authority exists that can grant the requested priviledges.");
+            }
+            else
+            {
+                // Just pick the first compatible authority.
+                for (auto coin : coins)
+                {
+                    totalBchAvailable += coin.tx->vout[coin.i].nValue;
+                    chosenCoins.push_back(coin);
+                    break;
+                }
+            }
+
+            CReserveKey renewAuthorityKey(wallet);
+            totalBchNeeded += RenewAuthority(chosenCoins[0], outputs, renewAuthorityKey);
+
+            { // Construct the new authority
+                CScript script = GetScriptForDestination(dst, grpID, (CAmount)auth);
+                CRecipient recipient = {script, GROUPED_SATOSHI_AMT, false};
+                outputs.push_back(recipient);
+                totalBchNeeded += GROUPED_SATOSHI_AMT;
+            }
+
+            CWalletTx wtx;
+            ConstructTx(wtx, chosenCoins, outputs, totalBchAvailable, totalBchNeeded, 0, 0, grpID, wallet);
+            renewAuthorityKey.KeepKey();
+            return wtx.GetHash().GetHex();
+        }
+    }
+    else if (operation == "new")
+    {
+        LOCK2(cs_main, wallet->cs_wallet);
+
+        unsigned int curparam = 2;
 
         CReserveKey authKeyReservation(wallet);
         CTxDestination authDest;
@@ -889,6 +1343,8 @@ extern UniValue token(const UniValue &params, bool fHelp)
                 mintInput = COutPoint(txid, nOutput);
             }
 
+        } else {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: no input tx provided");
         }
 
         // CCoinControl coinControl;
@@ -925,10 +1381,8 @@ extern UniValue token(const UniValue &params, bool fHelp)
 
             if (0 == coins.size())
             {
-                throw JSONRPCError(RPC_INVALID_PARAMS, "No coins available in the wallet");
+                throw JSONRPCError(RPC_INVALID_PARAMS, "Input tx is not available for spending");
             }
-
-            coin = coins[coins.size() - 1];
 
             if (!mintInput.IsNull())
             {
@@ -939,9 +1393,16 @@ extern UniValue token(const UniValue &params, bool fHelp)
                 }
             }
         }
+        if (coin.tx == nullptr)
+            throw JSONRPCError(RPC_INVALID_PARAMS, "DarkMatter genesis tx is not available");
 
         uint64_t grpNonce = 0;
         CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), TokenGroupIdFlags::NONE, grpNonce);
+        if (EncodeTokenGroup(grpID) != params[1].get_str())
+        {
+            LogPrintf("Incorrect DarkMatter genesis tx. Expected grpID: [%s]. Calculated grpID: [%s]", params[1].get_str(), EncodeTokenGroup(grpID));
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Incorrect DarkMatter genesis tx");
+        }
 
         std::vector<COutput> chosenCoins;
         chosenCoins.push_back(coin);
