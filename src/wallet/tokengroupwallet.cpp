@@ -1379,6 +1379,9 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
 
         CReserveKey authKeyReservation(wallet);
         CTxDestination authDest;
+        CScript opretScript;
+        std::vector<CRecipient> outputs;
+
         if (curparam >= params.size())
         {
             CPubKey authKey;
@@ -1390,8 +1393,14 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
             authDest = DecodeDestination(params[curparam].get_str(), Params());
             if (authDest == CTxDestination(CNoDestination()))
             {
-                throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: no authority address");
+                auto desc = ParseGroupDescParams(params, curparam);
+                if (desc.size()) // Add an op_return if there's a token desc doc
+                {
+                    opretScript = BuildTokenDescScript(desc);
+                    outputs.push_back(CRecipient{opretScript, 0, false});
+                }
             }
+            curparam++;
         }
 
         COutPoint mintInput = COutPoint();
@@ -1473,7 +1482,7 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
             throw JSONRPCError(RPC_INVALID_PARAMS, "DarkMatter genesis tx is not available");
 
         uint64_t grpNonce = 0;
-        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), TokenGroupIdFlags::NONE, grpNonce);
+        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), opretScript, TokenGroupIdFlags::NONE, grpNonce);
         if (EncodeTokenGroup(grpID) != params[1].get_str())
         {
             LogPrintf("Incorrect DarkMatter genesis tx. Expected grpID: [%s]. Calculated grpID: [%s]", params[1].get_str(), EncodeTokenGroup(grpID));
@@ -1482,8 +1491,6 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
 
         std::vector<COutput> chosenCoins;
         chosenCoins.push_back(coin);
-
-        std::vector<CRecipient> outputs;
 
         CScript script = GetScriptForDestination(authDest, grpID, (CAmount)GroupAuthorityFlags::ALL | grpNonce);
         CRecipient recipient = {script, GROUPED_SATOSHI_AMT, false};
