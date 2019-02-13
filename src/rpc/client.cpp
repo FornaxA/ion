@@ -155,9 +155,8 @@ static const CRPCConvertParam vRPCConvertParams[] =
         {"getaccumulatorvalues", 0},
         {"enableautomintaddress", 0},
         {"calculateaccumulatorvalues", 0},
-        {"token", 2},
-        {"darkmatter", 2},
-        {"darkmatter", 3},
+        {"token", 3},
+        {"darkmatter", 5},
         {"getfeeinfo", 0}
     };
 
