@@ -1402,9 +1402,12 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
                     opretScript = BuildTokenDescScript(desc);
                     outputs.push_back(CRecipient{opretScript, 0, false});
                 }
+                CPubKey authKey;
+                authKeyReservation.GetReservedKey(authKey);
+                authDest = authKey.GetID();
             }
-            curparam++;
         }
+        curparam++;
 
         COutPoint mintInput = COutPoint();
 
