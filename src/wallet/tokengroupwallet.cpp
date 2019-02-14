@@ -1169,7 +1169,7 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
             "\n"
             "\nExamples:\n"
             "\nCreate a transaction with no inputs\n" +
-            HelpExampleCli("createrawtransaction", "\"[]\" \"{\\\"myaddress\\\":0.01}\"") +
+            HelpExampleCli("darkmatter", "new \"xdm\" \"DarkMatter\" \"https://github.com/FornaxA/ion/desc.json\" 0 \"[{\\\"txid\\\":\\\"a0672e84dd6a5bad753a6626e72f5a6d4346a8e53ce8f9c94f28b852a86c3dde\\\",\\\"vout\\\":0}]\"") +
             "\nAdd sufficient unsigned inputs to meet the output value\n" +
             HelpExampleCli("fundrawtransaction", "\"rawtransactionhex\"") + "\nSign the transaction\n" +
             HelpExampleCli("signrawtransaction", "\"fundedtransactionhex\"") + "\nSend the transaction\n" +
