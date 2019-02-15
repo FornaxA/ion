@@ -1192,14 +1192,18 @@ bool CheckTransaction(const CTransaction& tx, bool fZerocoinActive, bool fReject
             vInOutPoints.insert(txin.prevout);
     }
 
+    if (tx.IsCoinBase() || tx.IsCoinStake() || (fZerocoinActive && tx.IsZerocoinSpend())) {
+        // These tx's can't have group outputs because it has no group inputs or mintable outputs
+        if (IsAnyTxOutputGrouped(tx))
+            return state.DoS(100, false, REJECT_INVALID, "wrong-inputs-for-group-outputs");
+    } else {
+        // Only allow new groups when not in management mode or when not creating management group tokens
+    }
+
     if (tx.IsCoinBase()) {
         if (tx.vin[0].scriptSig.size() < 2 || tx.vin[0].scriptSig.size() > 150)
             return state.DoS(100, error("CheckTransaction() : coinbase script size=%d", tx.vin[0].scriptSig.size()),
                 REJECT_INVALID, "bad-cb-length");
-
-        // Coinbase tx can't have group outputs because it has no group inputs or mintable outputs
-        if (IsAnyTxOutputGrouped(tx))
-            return state.DoS(100, false, REJECT_INVALID, "coinbase-has-group-outputs");
     } else if (fZerocoinActive && tx.IsZerocoinSpend()) {
         if(tx.vin.size() < 1 || static_cast<int>(tx.vin.size()) > Params().Zerocoin_MaxSpendsPerTransaction())
             return state.DoS(10, error("CheckTransaction() : Zerocoin Spend has more than allowed txin's"), REJECT_INVALID, "bad-zerocoinspend");
@@ -3126,6 +3130,23 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     return state.DoS(100, error("%s : tried to spend invalid input %s in tx %s", __func__, in.prevout.ToString(),
                                   tx.GetHash().GetHex()), REJECT_INVALID, "bad-txns-invalid-inputs");
                 }
+                // Set flag if input is a group token management address
+            }
+            //Temporarily disable new token creation during management mode
+            if (block.nTime > GetSporkValue(SPORK_10_TOKENGROUP_MANAGEMENT_MODE) && !IsInitialBlockDownload()) {
+                for (const CTxOut& txOut : tx.vout) {
+                    // If the vout is a token new that does not come from the current management address, then
+                    //    return state.DoS(100, error("ConnectBlock() : zerocoin transactions are currently in maintenance mode"));
+                    // Alternatively: only fail if the token new is not a management token
+                    // Check for TokenGroupID(txOut).hasFlag(TokenGroupIdFlags::MGT_TOKEN)
+                    const CScript &scriptPubKey = txOut.scriptPubKey;
+//                    CTokenGroupInfo tokenGrp(scriptPubKey);
+//                    if (!tokenGrp.associatedGroup.hasFlag(TokenGroupIdFlags::MGT_TOKEN)) {
+                    if (!GetTokenGroup(scriptPubKey).hasFlag(TokenGroupIdFlags::MGT_TOKEN)) {
+                        return state.DoS(100, error("%s : new token creation is not possible during token group management mode", 
+                                __func__), REJECT_INVALID, "token-group-management");
+                    }
+                }
             }
 
             // Check that xION mints are not already known
@@ -3163,6 +3184,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
             if (!CheckInputs(tx, state, view, fScriptChecks, flags, false, nScriptCheckThreads ? &vChecks : NULL))
                 return false;
+#if 0
+            if (!TransactionValueValid(pblock, tx, state))
+                return false;
+#endif
             control.Add(vChecks);
         }
         nValueOut += tx.GetValueOut();
@@ -3193,6 +3218,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     CAmount nMoneySupplyPrev = pindex->pprev ? pindex->pprev->nMoneySupply : 0;
     pindex->nMoneySupply = nMoneySupplyPrev + nValueOut - nValueIn;
     pindex->nMint = pindex->nMoneySupply - nMoneySupplyPrev + nFees;
+    //pindex->nXDMTransactions = nXDMTransactionsPrev + nXDMTransactionsCur;
 
 //    LogPrintf("XX69----------> ConnectBlock(): nValueOut: %s, nValueIn: %s, nFees: %s, nMint: %s xIonSpent: %s\n",
 //              FormatMoney(nValueOut), FormatMoney(nValueIn),
@@ -4002,6 +4028,8 @@ bool ReceivedBlockTransactions(const CBlock& block, CValidationState& state, CBl
         pindexNew->SetProofOfStake();
     pindexNew->nTx = block.vtx.size();
     pindexNew->nChainTx = 0;
+    pindexNew->nXDMTx = block.getXDMTxCount();
+    pindexNew->nChainXDMTx = 0;
     pindexNew->nFile = pos.nFile;
     pindexNew->nDataPos = pos.nPos;
     pindexNew->nUndoPos = 0;
@@ -4019,6 +4047,7 @@ bool ReceivedBlockTransactions(const CBlock& block, CValidationState& state, CBl
             CBlockIndex* pindex = queue.front();
             queue.pop_front();
             pindex->nChainTx = (pindex->pprev ? pindex->pprev->nChainTx : 0) + pindex->nTx;
+            pindex->nChainXDMTx = (pindex->pprev ? pindex->pprev->nChainXDMTx : 0) + pindex->nXDMTx;
             {
                 LOCK(cs_nBlockSequenceId);
                 pindex->nSequenceId = nBlockSequenceId++;
@@ -5041,12 +5070,15 @@ bool static LoadBlockIndexDB(string& strError)
             if (pindex->pprev) {
                 if (pindex->pprev->nChainTx) {
                     pindex->nChainTx = pindex->pprev->nChainTx + pindex->nTx;
+                    pindex->nChainXDMTx = pindex->pprev->nChainXDMTx + pindex->nXDMTx;
                 } else {
                     pindex->nChainTx = 0;
+                    pindex->nChainXDMTx = 0;
                     mapBlocksUnlinked.insert(std::make_pair(pindex->pprev, pindex));
                 }
             } else {
                 pindex->nChainTx = pindex->nTx;
+                pindex->nChainXDMTx = pindex->nXDMTx;
             }
         }
         if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS) && (pindex->nChainTx || pindex->pprev == NULL))

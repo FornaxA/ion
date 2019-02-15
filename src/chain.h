@@ -147,6 +147,9 @@ public:
     //! Change to 64-bit type when necessary; won't happen before 2030
     unsigned int nChainTx;
 
+    unsigned int nXDMTx;
+    unsigned int nChainXDMTx;
+
     //! Verification status of this block. See enum BlockStatus
     unsigned int nStatus;
 
@@ -194,6 +197,8 @@ public:
         nChainWork = 0;
         nTx = 0;
         nChainTx = 0;
+        nXDMTx = 0;
+        nChainXDMTx = 0;
         nStatus = 0;
         nSequenceId = 0;
 
@@ -481,6 +486,9 @@ public:
             READWRITE(nAccumulatorCheckpoint);
             READWRITE(mapZerocoinSupply);
             READWRITE(vMintDenominationsInBlock);
+        }
+        if(this->nVersion > 9) {
+            READWRITE(VARINT(nXDMTx));
         }
 
     }

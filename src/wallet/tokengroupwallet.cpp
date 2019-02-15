@@ -1488,7 +1488,7 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
             throw JSONRPCError(RPC_INVALID_PARAMS, "DarkMatter genesis tx is not available");
 
         uint64_t grpNonce = 0;
-        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), opretScript, TokenGroupIdFlags::NONE, grpNonce);
+        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), opretScript, (TokenGroupIdFlags)TokenGroupIdFlags::STICKY_MELT | TokenGroupIdFlags::MGT_TOKEN, grpNonce);
         if (EncodeTokenGroup(grpID) != params[1].get_str())
         {
             LogPrintf("Incorrect DarkMatter genesis tx. Expected grpID: [%s]. Calculated grpID: [%s]", params[1].get_str(), EncodeTokenGroup(grpID));

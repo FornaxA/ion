@@ -39,6 +39,21 @@ bool IsAnyTxOutputGrouped(const CTransaction &tx)
     return false;
 }
 
+bool IsAnyTxOutputGroupedMint(const CTransaction &tx)
+{
+    for (const CTxOut &txout : tx.vout)
+    {
+        CTokenGroupInfo grp(txout.scriptPubKey);
+        if (grp.invalid)
+            return true; // Its still grouped even if invalid
+        if (grp.associatedGroup != NoGroup)
+            return true;
+        // TODO: FornaxA - Add check for management group / new token
+    }
+
+    return false;
+}
+
 std::vector<unsigned char> SerializeAmount(CAmount num)
 {
     CDataStream strm(SER_NETWORK, CLIENT_VERSION);
@@ -365,14 +380,6 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
                     nXDMFeesNeeded += 1.0 * COIN;
                     LogPrint("token", "%s - newGrpId=[%s] fee cost=[%d]\n", __func__, EncodeTokenGroup(newGrpId), nXDMFeesNeeded);
                 }
-                if (GetTokenGroup(Params().DarkMatterGroup()) == newGrpId)
-                {
-                    LogPrint("token", "%s - DarkMatter creation transaction.\nnewGrpId=[%s]\n", __func__, EncodeTokenGroup(newGrpId));
-                }
-                else
-                {
-                    LogPrint("token", "%s - newGrpId=[%s]\n", __func__, EncodeTokenGroup(newGrpId));
-                }
 
                 bal.allowedCtrlOutputPerms = bal.ctrlPerms = GroupAuthorityFlags::ALL;
             }
@@ -407,4 +414,8 @@ CTokenGroupID CTokenGroupID::parentGroup(void) const
     if (data.size() <= PARENT_GROUP_ID_SIZE)
         return CTokenGroupID(data);
     return CTokenGroupID(std::vector<unsigned char>(data.begin(), data.begin() + PARENT_GROUP_ID_SIZE));
+}
+
+bool CTokenGroupID::hasFlag(TokenGroupIdFlags flag) const { 
+    return data.size() >= PARENT_GROUP_ID_SIZE ? hasTokenGroupIdFlag((TokenGroupIdFlags)data[31], flag) : false;
 }

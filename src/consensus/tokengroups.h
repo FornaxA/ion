@@ -19,9 +19,44 @@ static const unsigned int REJECT_GROUP_IMBALANCE = 0x104;
 enum class TokenGroupIdFlags : uint8_t
 {
     NONE = 0,
-    SAME_SCRIPT = 1, // covenants/ encumberances -- output script template must match input
-    BALANCE_BCH = 2 // group inputs and outputs must balance both tokens and BCH
+    SAME_SCRIPT = 1U, // covenants/ encumberances -- output script template must match input
+    BALANCE_BCH = 1U << 1, // group inputs and outputs must balance both tokens and BCH
+    STICKY_MELT = 1U << 2, // group can always melt tokens
+    MGT_TOKEN = 1U << 3 // group does not pay fees in XDM
 };
+
+inline TokenGroupIdFlags operator|(const TokenGroupIdFlags a, const TokenGroupIdFlags b)
+{
+    TokenGroupIdFlags ret = (TokenGroupIdFlags)(((uint8_t)a) | ((uint8_t)b));
+    return ret;
+}
+
+inline TokenGroupIdFlags operator~(const TokenGroupIdFlags a)
+{
+    TokenGroupIdFlags ret = (TokenGroupIdFlags)(~((uint8_t)a));
+    return ret;
+}
+
+inline TokenGroupIdFlags operator&(const TokenGroupIdFlags a, const TokenGroupIdFlags b)
+{
+    TokenGroupIdFlags ret = (TokenGroupIdFlags)(((uint8_t)a) & ((uint8_t)b));
+    return ret;
+}
+
+inline TokenGroupIdFlags &operator|=(TokenGroupIdFlags &a, const TokenGroupIdFlags b)
+{
+    a = (TokenGroupIdFlags)(((uint8_t)a) | ((uint8_t)b));
+    return a;
+}
+
+inline TokenGroupIdFlags &operator&=(TokenGroupIdFlags &a, const TokenGroupIdFlags b)
+{
+    a = (TokenGroupIdFlags)(((uint8_t)a) & ((uint8_t)b));
+    return a;
+}
+inline bool hasTokenGroupIdFlag(TokenGroupIdFlags object, TokenGroupIdFlags flag) { 
+    return (((uint8_t)object) & ((uint8_t)flag)) != 0;
+}
 
 // The definitions below are used internally.  They are defined here for use in unit tests.
 class CTokenGroupID
@@ -66,6 +101,8 @@ public:
     // CTxDestination ControllingAddress(txnouttype addrType) const;
     //* Returns this groupID as a string in bech32 format
     // std::string Encode(const CChainParams &params = Params()) const;
+
+    bool hasFlag(TokenGroupIdFlags flag) const;
 };
 
 namespace std
@@ -104,37 +141,37 @@ enum class GroupAuthorityFlags : uint64_t
 
 inline GroupAuthorityFlags operator|(const GroupAuthorityFlags a, const GroupAuthorityFlags b)
 {
-    GroupAuthorityFlags ret = (GroupAuthorityFlags)(((uint64_t)a) | ((uint64_t)b));
+    GroupAuthorityFlags ret = (GroupAuthorityFlags)(((uint8_t)a) | ((uint8_t)b));
     return ret;
 }
 
 inline GroupAuthorityFlags operator~(const GroupAuthorityFlags a)
 {
-    GroupAuthorityFlags ret = (GroupAuthorityFlags)(~((uint64_t)a));
+    GroupAuthorityFlags ret = (GroupAuthorityFlags)(~((uint8_t)a));
     return ret;
 }
 
 inline GroupAuthorityFlags operator&(const GroupAuthorityFlags a, const GroupAuthorityFlags b)
 {
-    GroupAuthorityFlags ret = (GroupAuthorityFlags)(((uint64_t)a) & ((uint64_t)b));
+    GroupAuthorityFlags ret = (GroupAuthorityFlags)(((uint8_t)a) & ((uint8_t)b));
     return ret;
 }
 
 inline GroupAuthorityFlags &operator|=(GroupAuthorityFlags &a, const GroupAuthorityFlags b)
 {
-    a = (GroupAuthorityFlags)(((uint64_t)a) | ((uint64_t)b));
+    a = (GroupAuthorityFlags)(((uint8_t)a) | ((uint8_t)b));
     return a;
 }
 
 inline GroupAuthorityFlags &operator&=(GroupAuthorityFlags &a, const GroupAuthorityFlags b)
 {
-    a = (GroupAuthorityFlags)(((uint64_t)a) & ((uint64_t)b));
+    a = (GroupAuthorityFlags)(((uint8_t)a) & ((uint8_t)b));
     return a;
 }
 
 inline bool hasCapability(GroupAuthorityFlags object, const GroupAuthorityFlags capability)
 {
-    return (((uint64_t)object) & ((uint64_t)capability)) != 0;
+    return (((uint8_t)object) & ((uint8_t)capability)) != 0;
 }
 
 inline CAmount toAmount(GroupAuthorityFlags f) { return (CAmount)f; }
@@ -210,6 +247,9 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
 
 // Return true if any output in this transaction is part of a group
 bool IsAnyTxOutputGrouped(const CTransaction &tx);
+
+// Return true if any output in this transaction is part of a group
+bool IsAnyTxOutputGroupedMint(const CTransaction &tx);
 
 // Serialize a CAmount into an array of bytes.
 // This serialization does not store the length of the serialized data within the serialized data.
