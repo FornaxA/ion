@@ -146,3 +146,8 @@ bool CBlock::IsZerocoinStake() const
 {
     return IsProofOfStake() && vtx[1].IsZerocoinSpend();
 }
+
+unsigned int CBlock::getXDMTxCount() const
+{
+    return 0;
+}
