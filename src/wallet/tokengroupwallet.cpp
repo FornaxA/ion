@@ -1144,7 +1144,7 @@ extern UniValue token(const UniValue &params, bool fHelp)
     return NullUniValue;
 }
 
-extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
+extern UniValue managementtoken(const UniValue &paramsIn, bool fHelp)
 {
     CWallet *wallet = pwalletMain;
     if (!pwalletMain)
@@ -1169,7 +1169,7 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
             "\n"
             "\nExamples:\n"
             "\nCreate a transaction with no inputs\n" +
-            HelpExampleCli("darkmatter", "new \"xdm\" \"DarkMatter\" \"https://github.com/FornaxA/ion/desc.json\" 0 \"[{\\\"txid\\\":\\\"a0672e84dd6a5bad753a6626e72f5a6d4346a8e53ce8f9c94f28b852a86c3dde\\\",\\\"vout\\\":0}]\"") +
+            HelpExampleCli("managementtoken", "new \"XDM\" \"DarkMatter\" \"https://github.com/ioncoincore/ion/desc.json\" 0") +
             "\nAdd sufficient unsigned inputs to meet the output value\n" +
             HelpExampleCli("fundrawtransaction", "\"rawtransactionhex\"") + "\nSign the transaction\n" +
             HelpExampleCli("signrawtransaction", "\"fundedtransactionhex\"") + "\nSend the transaction\n" +
@@ -1182,7 +1182,7 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
 
     UniValue params(UniValue::VARR);
     params.push_back(paramsIn[0]);
-    params.push_back(Params().DarkMatterGroup());
+    params.push_back("rtdarkmatter");
     for (unsigned int i=1; i < paramsIn.size(); i++)
     {
         params.push_back(paramsIn[i]);
@@ -1377,7 +1377,6 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
     else if (operation == "new")
     {
         LOCK2(cs_main, wallet->cs_wallet);
-
         unsigned int curparam = 2;
 
         CReserveKey authKeyReservation(wallet);
@@ -1387,10 +1386,7 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
 
         if (curparam >= params.size())
         {
-            CPubKey authKey;
-            authKeyReservation.GetReservedKey(authKey);
-            authDest = authKey.GetID();
-        }
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Missing parameters");        }
         else
         {
             authDest = DecodeDestination(params[curparam].get_str(), Params());
@@ -1413,57 +1409,28 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
 
         curparam++;
 
-        if (curparam < params.size())
-        {
-            UniValue inputs = params[curparam].get_array();
-
-            for (unsigned int idx = 0; idx < inputs.size(); idx++)
-            {
-                const UniValue &input = inputs[idx];
-                const UniValue &o = input.get_obj();
-
-                uint256 txid = ParseHashO(o, "txid");
-
-                const UniValue &vout_v = find_value(o, "vout");
-                if (!vout_v.isNum())
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, missing vout key");
-                int nOutput = vout_v.get_int();
-                if (nOutput < 0)
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, vout must be positive");
-
-                mintInput = COutPoint(txid, nOutput);
-            }
-
-        } else {
-            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: no input tx provided");
-        }
-
-        // CCoinControl coinControl;
-        // coinControl.fAllowOtherInputs = true; // Allow a normal bitcoin input for change
         COutput coin(nullptr, 0, 0, false);
-
+        CTxDestination dest = DecodeDestination(Params().TokenManagementKey());
         {
             std::vector<COutput> coins;
             CAmount lowest = Params().MaxMoneyOut();
-            wallet->FilterCoins(coins, [&lowest, mintInput](const CWalletTx *tx, const CTxOut *out) {
+            wallet->FilterCoins(coins, [&lowest, dest](const CWalletTx *tx, const CTxOut *out) {
                 CTokenGroupInfo tg(out->scriptPubKey);
                 // although its possible to spend a grouped input to produce
                 // a single mint group, I won't allow it to make the tx construction easier.
+
                 if ((tg.associatedGroup == NoGroup))
                 {
-                    if (mintInput.IsNull())
+                    CTxDestination address;
+                    txnouttype whichType;
+                    if (ExtractDestinationAndType(out->scriptPubKey, address, whichType))
                     {
-                        if ((out->nValue < lowest))
-                        {
-                            lowest = out->nValue;
-                            return true;
-                        }
-                    }
-                    else
-                    {
-                        if (mintInput.hash == tx->GetHash())
-                        {
-                            return true;
+                        if (address == dest){
+                            if ((out->nValue < lowest))
+                            {
+                                lowest = out->nValue;
+                                return true;
+                            }
                         }
                     }
                 }
@@ -1475,25 +1442,13 @@ extern UniValue darkmatter(const UniValue &paramsIn, bool fHelp)
                 throw JSONRPCError(RPC_INVALID_PARAMS, "Input tx is not available for spending");
             }
 
-            if (!mintInput.IsNull())
-            {
-                for (unsigned int i = 0; i < coins.size(); i++)
-                {
-                    if (coins.at(i).GetOutPoint() == mintInput)
-                        coin = coins.at(i);
-                }
-            }
+            coin = coins[coins.size() - 1];
         }
         if (coin.tx == nullptr)
-            throw JSONRPCError(RPC_INVALID_PARAMS, "DarkMatter genesis tx is not available");
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Management Group Token key is not available");
 
         uint64_t grpNonce = 0;
-        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), opretScript, TokenGroupIdFlags::NONE, grpNonce);
-        if (EncodeTokenGroup(grpID) != params[1].get_str())
-        {
-            LogPrintf("Incorrect DarkMatter genesis tx. Expected grpID: [%s]. Calculated grpID: [%s]", params[1].get_str(), EncodeTokenGroup(grpID));
-            throw JSONRPCError(RPC_INVALID_PARAMS, "Incorrect DarkMatter genesis tx");
-        }
+        CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), opretScript, (TokenGroupIdFlags)TokenGroupIdFlags::STICKY_MELT | TokenGroupIdFlags::MGT_TOKEN, grpNonce);
 
         std::vector<COutput> chosenCoins;
         chosenCoins.push_back(coin);
