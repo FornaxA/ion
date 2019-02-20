@@ -54,6 +54,18 @@ bool IsAnyTxOutputGroupedMint(const CTransaction &tx)
     return false;
 }
 
+bool IsAnyTxOutputGroupedCreation(const CTransaction &tx, const TokenGroupIdFlags tokenGroupIdFlags)
+{
+    for (const CTxOut& txout : tx.vout) {
+        CTokenGroupInfo grp(txout.scriptPubKey);
+        if (grp.invalid)
+            return false;
+        if (grp.isGroupCreation(tokenGroupIdFlags))
+            return true;
+    }
+    return false;
+}
+
 std::vector<unsigned char> SerializeAmount(CAmount num)
 {
     CDataStream strm(SER_NETWORK, CLIENT_VERSION);
@@ -235,6 +247,9 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
     bool anyOutputGroups = false;
     bool anyOutputControlGroups = false;
 
+    // Tokens minted from the tokenGroupManagement address can create management tokens
+    bool anyInputsGroupManagement = false;
+
     CScript firstOpReturn;
 
     // Iterate through all the outputs constructing the final balances of every group.
@@ -286,6 +301,13 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
         if (coin.nHeight < Params().OpGroup_StartHeight())
             continue;
         const CScript &script = coin.out.scriptPubKey;
+
+        CTxDestination payeeDest;
+        ExtractDestination(script, payeeDest);
+        if (EncodeDestination(payeeDest) == Params().TokenManagementKey())
+            anyInputsGroupManagement = true;
+        LogPrint("tokens", "%s - %d", __func__, chainActive.Tip()->nHeight);
+
         CTokenGroupInfo tokenGrp(script);
         // The prevout should never be invalid because that would mean that this node accepted a block with an
         // invalid OP_GROUP tx in it.
@@ -366,7 +388,16 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
                     return state.Invalid(false, REJECT_GROUP_IMBALANCE, "grp-invalid-create",
                          "Multiple grouped outputs created during group creation transaction");
 
-                if (EncodeTokenGroup(newGrpId) == Params().DarkMatterGroup())
+                if (newGrpId.hasFlag(TokenGroupIdFlags::MGT_TOKEN))
+                {
+                    if (anyInputsGroupManagement) {
+                        LogPrint("token", "%s - Group management creation transaction. newGrpId=[%s]\n", __func__, EncodeTokenGroup(newGrpId));
+                    } else {
+                        return state.Invalid(false, REJECT_INVALID, "grp-invalid-tx",
+                            "No group management capability at any input address");
+                    }
+                }
+                if (EncodeTokenGroup(newGrpId) == "Params().DarkMatterGroup()")
                 {
                     // No fee restrictions on creating the XDM token.
                     // Since the DarkMatter group ID is deterministically derived from the a specific output, this creation tx is a singularity
@@ -382,6 +413,14 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
                 }
 
                 bal.allowedCtrlOutputPerms = bal.ctrlPerms = GroupAuthorityFlags::ALL;
+            }
+            else 
+            {
+                if (((uint64_t)bal.ctrlOutputPerms & (uint64_t)~GroupAuthorityFlags::ALL_BITS) != 0)
+                {
+                    return state.Invalid(false, REJECT_INVALID, "grp-invalid-tx",
+                         "Only mint transactions can have a nonce");
+                }
             }
         }
 
@@ -406,7 +445,6 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
 
     return true;
 }
-
 
 bool CTokenGroupID::isUserGroup(void) const { return (!data.empty()); }bool CTokenGroupID::isSubgroup(void) const { return (data.size() > PARENT_GROUP_ID_SIZE); }
 CTokenGroupID CTokenGroupID::parentGroup(void) const

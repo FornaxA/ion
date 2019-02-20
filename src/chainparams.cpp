@@ -185,7 +185,7 @@ public:
         nDGWStartTime = 1521851265;                 // GMT: Saturday, March 24, 2018 12:27:45 AM - Exact time when DGW algorithm starts and old MIDAS stops
 
         nOpGroupStartHeight = 99999999;
-        strDarkMatterGroup = "undefined";
+        strTokenManagementKey = "inqaYuaES1cmRBXHodp25UceeVPbWQG5wY";
 
         /**
          * Build the genesis block. Note that the output of the genesis coinbase cannot
@@ -318,8 +318,7 @@ public:
         nDGWStartTime = nZerocoinStartTime;
 
         nOpGroupStartHeight = 500000;
-//        strDarkMatterGroup = "tion1z0hxqegnter2g7mjexea65sfqy7wm0uwxexcxsvf5njwd63w8qrqqxwd8cc";
-        strDarkMatterGroup = "tion1zvuvwymh7kka7jz099cka7yyd5jxdrwnm70xmm7ugr8ygh8uk8kqqtdcky2";
+        strTokenManagementKey = "";
 
         //! Modify the testnet genesis block so the timestamp is valid for a later start.
         const char* pszTimestamp = "The Guardian: [2nd Feb 2017] Finsbury Park mosque wins apology and damages from Thomson Reuters";
@@ -428,7 +427,7 @@ public:
         nDGWStartTime = nZerocoinStartTime;
 
         nOpGroupStartHeight = 1;
-        strDarkMatterGroup = "rtion1zwzk6wrphfcd44dkkmcevrtpqvm3auyeuzn3sdrvlerxfy9y238sqzwrhen";
+        strTokenManagementKey = "gHwMHVKmzGUNBcN92hbsahm2tTEBiAfAd4";
 
         //! Modify the testnet genesis block so the timestamp is valid for a later start.
         const char* pszTimestamp = "The Guardian: [2nd Feb 2017] Finsbury Park mosque wins apology and damages from Thomson Reuters";

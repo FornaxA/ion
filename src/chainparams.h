@@ -134,7 +134,7 @@ public:
 
     /** Tokens and DarkMatter **/
     int OpGroup_StartHeight() const { return nOpGroupStartHeight; }
-    std::string DarkMatterGroup() const { return strDarkMatterGroup; }
+    std::string TokenManagementKey() const { return strTokenManagementKey; }
 
     int MidasStartHeight() const { return nMidasStartHeight;   }
     int MidasStartTime()   const { return nMidasStartTime;     }
@@ -208,7 +208,7 @@ protected:
     int nBlockZerocoinV2;
 
     int nOpGroupStartHeight;
-    std::string strDarkMatterGroup;
+    std::string strTokenManagementKey;
 
     int nMidasStartHeight;
     int nMidasStartTime;

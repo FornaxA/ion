@@ -1307,6 +1307,17 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransa
         if (IsAnyTxOutputGrouped(tx))
             return state.DoS(0, false, REJECT_NONSTANDARD, "premature-op_group-tx");
     }
+
+    //Temporarily disable new token creation during management mode
+    if (GetAdjustedTime() > GetSporkValue(SPORK_10_TOKENGROUP_MANAGEMENT_MODE) && IsAnyTxOutputGroupedCreation(tx)) {
+        if (IsAnyTxOutputGroupedCreation(tx, TokenGroupIdFlags::MGT_TOKEN)) {
+            LogPrintf("%s: Management token creation during token group management mode\n", __func__);
+        } else {
+            return state.DoS(0, error("%s : new token creation is not possible during token group management mode", 
+                            __func__), REJECT_INVALID, "token-group-management");
+        }
+    }
+
     // Rather not work on nonstandard transactions (unless -testnet/-regtest)
     string reason;
     if (Params().RequireStandard() && !IsStandardTx(tx, reason))
@@ -3133,19 +3144,12 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 // Set flag if input is a group token management address
             }
             //Temporarily disable new token creation during management mode
-            if (block.nTime > GetSporkValue(SPORK_10_TOKENGROUP_MANAGEMENT_MODE) && !IsInitialBlockDownload()) {
-                for (const CTxOut& txOut : tx.vout) {
-                    // If the vout is a token new that does not come from the current management address, then
-                    //    return state.DoS(100, error("ConnectBlock() : zerocoin transactions are currently in maintenance mode"));
-                    // Alternatively: only fail if the token new is not a management token
-                    // Check for TokenGroupID(txOut).hasFlag(TokenGroupIdFlags::MGT_TOKEN)
-                    const CScript &scriptPubKey = txOut.scriptPubKey;
-//                    CTokenGroupInfo tokenGrp(scriptPubKey);
-//                    if (!tokenGrp.associatedGroup.hasFlag(TokenGroupIdFlags::MGT_TOKEN)) {
-                    if (!GetTokenGroup(scriptPubKey).hasFlag(TokenGroupIdFlags::MGT_TOKEN)) {
-                        return state.DoS(100, error("%s : new token creation is not possible during token group management mode", 
-                                __func__), REJECT_INVALID, "token-group-management");
-                    }
+            if (block.nTime > GetSporkValue(SPORK_10_TOKENGROUP_MANAGEMENT_MODE) && !IsInitialBlockDownload() && IsAnyTxOutputGroupedCreation(tx)) {
+                if (IsAnyTxOutputGroupedCreation(tx, TokenGroupIdFlags::MGT_TOKEN)) {
+                    LogPrintf("%s: Management token creation during token group management mode\n", __func__);
+                } else {
+                    return state.DoS(0, error("%s : new token creation is not possible during token group management mode", 
+                                    __func__), REJECT_INVALID, "token-group-management");
                 }
             }
 
