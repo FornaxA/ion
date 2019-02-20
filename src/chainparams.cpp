@@ -169,6 +169,7 @@ public:
         nDGWStartTime = 1521851265;                 // GMT: Saturday, March 24, 2018 12:27:45 AM - Exact time when DGW algorithm starts and old MIDAS stops
 
         nOpGroupStartHeight = 99999999;
+        strTokenManagementKey = "inqaYuaES1cmRBXHodp25UceeVPbWQG5wY";
 
         // Fake Serial Attack
         nFakeSerialBlockheightEnd = 1073534;
@@ -306,6 +307,7 @@ public:
         nDGWStartTime = nZerocoinStartTime;
 
         nOpGroupStartHeight = 1;
+        strTokenManagementKey = "";
 
         // Fake Serial Attack
         nFakeSerialBlockheightEnd = -1;
@@ -409,6 +411,9 @@ public:
         nMidasStartTime = 253402300799;
         nDGWStartHeight = nZerocoinStartHeight;
         nDGWStartTime = nZerocoinStartTime;
+
+        nOpGroupStartHeight = 1;
+        strTokenManagementKey = "gAQQQjA4DCT2EZDVK6Jae4mFfB217V43Nt";
 
         //! Modify the regtest genesis block so the timestamp is valid for a later start.
         genesis.nTime = 1491737471; // GMT: Thursday, February 2, 2017 14:30:00

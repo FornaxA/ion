@@ -139,7 +139,9 @@ public:
 
     CAmount InvalidAmountFiltered() const { return nInvalidAmountFiltered; };
 
+    /** Tokens and DarkMatter **/
     int OpGroup_StartHeight() const { return nOpGroupStartHeight; }
+    std::string TokenManagementKey() const { return strTokenManagementKey; }
 
     int MidasStartHeight() const { return nMidasStartHeight;   }
     int64_t MidasStartTime()   const { return nMidasStartTime;     }
@@ -214,6 +216,7 @@ protected:
     int nBlockZerocoinV2;
 
     int nOpGroupStartHeight;
+    std::string strTokenManagementKey;
 
     // fake serial attack
     int nFakeSerialBlockheightEnd = 0;
