@@ -420,7 +420,7 @@ public:
         nRejectOldSporkKey = 1545620400; //!> Reject old spork key after 12/24/2018 @ 3:00am (UTC)
 
         nMidasStartHeight = 99999999;
-        nMidasStartTime = 9997209344;
+        nMidasStartTime = 4070908800;
         nDGWStartHeight = nZerocoinStartHeight;
         nDGWStartTime = nZerocoinStartTime;
 
@@ -462,7 +462,7 @@ public:
         nStartMasternodePayments = 1558696183; // GMT: Thursday, 15. February 2018 12:03:03
         nBudget_Fee_Confirmations = 3; // Number of confirmations for the finalization fee. We have to make this very short
                                        // here because we only have a 8 block finalization window on testnet
-        bech32_hrp = "ionrt";
+        bech32_hrp = "rtion";
 
     }
     const Checkpoints::CCheckpointData& Checkpoints() const
