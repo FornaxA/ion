@@ -35,6 +35,7 @@
 #include "scheduler.h"
 #include "spork.h"
 #include "sporkdb.h"
+#include "tokengroupmanager.h"
 #include "txdb.h"
 #include "torcontrol.h"
 #include "ui_interface.h"
@@ -1646,6 +1647,8 @@ bool AppInit2()
         LogPrintf(" wallet      %15dms\n", GetTimeMillis() - nStart);
         zwalletMain = new CxIONWallet(pwalletMain->strWalletFile);
         pwalletMain->setZWallet(zwalletMain);
+
+        tokenGroupManager = CTokenGroupManager();
 
         RegisterValidationInterface(pwalletMain);
 
