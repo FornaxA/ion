@@ -543,10 +543,10 @@ extern std::unique_ptr<CCoinsViewCache> pcoinsTip;
 extern std::unique_ptr<CBlockTreeDB> pblocktree;
 
 /** Global variable that points to the zerocoin database (protected by cs_main) */
-extern CZerocoinDB* zerocoinDB;
+extern std::unique_ptr<CZerocoinDB> zerocoinDB;
 
 /** Global variable that points to the spork database (protected by cs_main) */
-extern CSporkDB* pSporkDB;
+extern std::unique_ptr<CSporkDB> pSporkDB;
 
 struct CBlockTemplate {
     CBlock block;
