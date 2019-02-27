@@ -309,6 +309,7 @@ extern UniValue reconsiderblock(const UniValue& params, bool fHelp);
 extern UniValue getaccumulatorvalues(const UniValue& params, bool fHelp);
 extern UniValue calculateaccumulatorvalues(const UniValue& params, bool fHelp);
 extern UniValue scantxoutset(const UniValue& params, bool fHelp);
+extern UniValue scantokens(const UniValue& params, bool fHelp);
 
 extern UniValue getpoolinfo(const UniValue& params, bool fHelp); // in rpc/masternode.cpp
 extern UniValue masternode(const UniValue& params, bool fHelp);
