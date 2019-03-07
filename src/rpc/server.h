@@ -227,6 +227,8 @@ extern UniValue getbalance(const UniValue& params, bool fHelp);
 extern UniValue getextendedbalance(const UniValue& params, bool fHelp);
 extern UniValue getunconfirmedbalance(const UniValue& params, bool fHelp);
 extern UniValue movecmd(const UniValue& params, bool fHelp);
+extern UniValue readdata(const UniValue& params, bool fHelp);
+extern UniValue senddata(const UniValue& params, bool fHelp);
 extern UniValue sendfrom(const UniValue& params, bool fHelp);
 extern UniValue sendmany(const UniValue& params, bool fHelp);
 extern UniValue addmultisigaddress(const UniValue& params, bool fHelp);

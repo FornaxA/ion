@@ -910,6 +910,142 @@ UniValue movecmd(const UniValue& params, bool fHelp)
     return true;
 }
 
+CScript BuildDataScript(const std::vector<std::vector<unsigned char> > &desc)
+{
+    CScript ret;
+    // Add a protocol description marker
+    uint32_t OpRetDataId = 78787878;
+    // Write the opcode and protocol description marker to the script
+    ret << OP_RETURN << OpRetDataId;
+    for (auto &d : desc)
+    {
+        // Add each data element to the script
+        ret << d;
+    }
+    return ret;
+}
+
+UniValue senddata(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 6)
+        throw runtime_error(
+            "senddata \"toionaddress\" \"text\" (\"text\" ... \"text\") )\n"
+            "\nCreate a transaction that sends data using OP_RETURN to an ION address.\n" +
+            HelpRequiringPassphrase() + "\n"
+
+            "\nArguments:\n"
+            "1...n \"text\"          (string, required) The text to send.\n"
+
+            "\nResult:\n"
+            "\"transactionid\"       (string) The transaction id.\n"
+
+            "\nExamples:\n"
+            "\nSend 'hello' to an address\n" +
+            HelpExampleCli("senddata", "\"iVpPG131hKv1t6iSnbu9HRrhTC7oM2UEaj\" \"hello\""));
+
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+
+    EnsureWalletIsUnlocked();
+
+    unsigned int curparam = 0;
+
+    // Create a vector with all strings passed as a parameter, with the strings encoded as chars
+    std::vector<std::vector<unsigned char> > dataVec;
+    for (curparam = 0; curparam < params.size(); curparam++) {
+        std::string text = params[curparam].get_str();
+        dataVec.push_back(std::vector<unsigned char>(text.begin(), text.end()));
+    }
+
+    // Create the tx recipient with the data output
+    vector<CRecipient> vecRecipients;
+    CScript opretScript = BuildDataScript(dataVec);
+    vecRecipients.push_back(CRecipient{opretScript, 0, false});
+
+    // Create and send the transaction
+    CWalletTx wtxNew;
+    CAmount nFeeRequired; // CreateTransaction adds the fee
+    CReserveKey reservekey(pwalletMain); // The change address
+    int nChangePosRet = -1; // CreateTransaction adds the change
+    string strError;
+
+    if (!pwalletMain->CreateTransaction(vecRecipients, wtxNew, reservekey, nFeeRequired, nChangePosRet, strError, NULL, ALL_COINS, false, (CAmount)0)) {
+        if (nFeeRequired > pwalletMain->GetBalance())
+            strError = strprintf("Error: This transaction requires a transaction fee of at least %s because of its amount, complexity, or use of recently received funds!", FormatMoney(nFeeRequired));
+        throw JSONRPCError(RPC_WALLET_ERROR, strError);
+    }
+    if (!pwalletMain->CommitTransaction(wtxNew, reservekey, "tx"))
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error: The transaction was rejected! This might happen if some of the coins in your wallet were already spent, such as if you used a copy of wallet.dat and coins were spent in the copy but not marked as spent here.");
+
+    return wtxNew.GetHash().GetHex();
+}
+
+bool BuildDataVector(CScript script, std::vector<std::vector<unsigned char> > &dataVector) {
+    CScript::const_iterator pc = script.begin();
+    std::vector<unsigned char> data;
+    opcodetype opcode;
+
+    // Check that we are parsing an OP_RETURN script
+    if (!script.GetOp(pc, opcode, data)) return false;
+    if (opcode != OP_RETURN) return false;
+
+    // Check that we are parsing data that has protocol version 78787878
+    if (!script.GetOp(pc, opcode, data)) return false;
+    uint32_t OpRetDataId;
+    if (data.size()!=4) return false;
+    OpRetDataId = (uint32_t)data[3] << 24 | (uint32_t)data[2] << 16 | (uint32_t)data[1] << 8 | (uint32_t)data[0];
+    if (OpRetDataId != 78787878) return false;
+
+    // Add each data block to the data vector
+    while (script.GetOp(pc, opcode, data)) {
+        LogPrintf("Found data element with data: [%s]\n", std::string(data.begin(), data.end()));
+        dataVector.emplace_back(data);
+    }
+
+    return true;
+}
+
+UniValue readdata(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 6)
+        throw runtime_error(
+            "readdata \"transactionid\"\n"
+            "\nScans the provided transaction for OP_RETURN data encoded according to the simple data protocol.\n" +
+            HelpRequiringPassphrase() + "\n"
+
+            "\nArguments:\n"
+            "1. \"transactionid\"  (string, required) The transaction ID that should be scanned for data.\n"
+
+            "\nExamples:\n" +
+            HelpExampleCli("readdata", "\"7b26308ace0b46aa3c60a8b7c6de08e054205d07fa205b9dccc4373edfb3d076\""));
+
+    LOCK(cs_main);
+
+    // Parses the tx id provided on the command line
+    uint256 hash = ParseHashV(params[0], "parameter 1");
+
+    // Fetches the transaction
+    CTransaction tx;
+    uint256 hashBlock = 0;
+    if (!GetTransaction(hash, tx, hashBlock, true))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No information available about transaction");
+
+    // Scan each transaction output for data
+    std::vector<std::vector<unsigned char> > dataVec;
+    for (const auto &txout : tx.vout) {
+        const CScript &script = txout.scriptPubKey;
+        if (txout.scriptPubKey[0] == OP_RETURN) {
+            BuildDataVector(script, dataVec);
+        }
+    }
+
+    // Create a JSON object with the data values as strings
+    UniValue ret(UniValue::VARR);
+    for (const auto &data : dataVec) {
+        ret.push_back(std::string(data.begin(), data.end()));
+    }
+
+    return ret;
+}
 
 UniValue sendfrom(const UniValue& params, bool fHelp)
 {
