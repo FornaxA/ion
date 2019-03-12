@@ -3288,7 +3288,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         nValueOut += tx.GetValueOut();
 
         if (IsAnyTxOutputGroupedCreation(tx)) {
-            tokenGroupManager.addNewTokenGroup(tx, state);
+            tokenGroupManager->addNewTokenGroup(tx, state);
         }
 
         CTxUndo undoDummy;

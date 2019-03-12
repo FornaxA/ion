@@ -1386,6 +1386,8 @@ bool AppInit2()
     //ION: Load Accumulator Checkpoints according to network (main/test/regtest)
     assert(AccumulatorCheckpoints::LoadCheckpoints(Params().NetworkIDString()));
 
+    tokenGroupManager = std::shared_ptr<CTokenGroupManager>(new CTokenGroupManager());
+
     fReindex = GetBoolArg("-reindex", false);
 
     // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
@@ -1719,8 +1721,6 @@ bool AppInit2()
         LogPrintf(" wallet      %15dms\n", GetTimeMillis() - nStart);
         zwalletMain = new CxIONWallet(pwalletMain->strWalletFile);
         pwalletMain->setZWallet(zwalletMain);
-
-        tokenGroupManager = CTokenGroupManager();
 
         RegisterValidationInterface(pwalletMain);
 
