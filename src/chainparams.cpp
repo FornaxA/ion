@@ -427,7 +427,7 @@ public:
         nDGWStartTime = nZerocoinStartTime;
 
         nOpGroupStartHeight = 1;
-        strTokenManagementKey = "g3LuM19HepjXFZY2W7JfKJjFhMkNbFjmfy";
+        strTokenManagementKey = "g8UQF3bHLBBw3MsXDPeWb45DDXGG2x2Wnr";
 
         //! Modify the testnet genesis block so the timestamp is valid for a later start.
         const char* pszTimestamp = "The Guardian: [2nd Feb 2017] Finsbury Park mosque wins apology and damages from Thomson Reuters";
