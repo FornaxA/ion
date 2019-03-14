@@ -38,6 +38,7 @@
 #include "sporkdb.h"
 #include "tokengroupmanager.h"
 #include "txdb.h"
+#include "tokendb.h"
 #include "torcontrol.h"
 #include "ui_interface.h"
 #include "util.h"
@@ -245,6 +246,7 @@ void PrepareShutdown()
         pblocktree.reset();
         zerocoinDB.reset();
         pSporkDB.reset();
+        pTokenDB.reset();
     }
 #ifdef ENABLE_WALLET
     if (pwalletMain)
@@ -869,6 +871,12 @@ bool AppInit2()
             LogPrintf("AppInit2 : parameter interaction: -zapwallettxes=<mode> -> setting -rescan=1\n");
     }
 
+    // -reindex implies reindexing the tokens
+    if (GetBoolArg("-reindex", false)) {
+        if (SoftSetBoolArg("-reindextokens", true))
+            LogPrintf("AppInit2 : parameter interaction: -reindex=<mode> -> setting -reindextokens=1\n");
+    }
+
     if (!GetBoolArg("-enableswifttx", fEnableSwiftTX)) {
         if (SoftSetArg("-swifttxdepth", "0"))
             LogPrintf("AppInit2 : parameter interaction: -enableswifttx=false -> setting -nSwiftTXDepth=0\n");
@@ -1169,6 +1177,7 @@ bool AppInit2()
             filesystem::path chainstateDir = GetDataDir() / "chainstate";
             filesystem::path sporksDir = GetDataDir() / "sporks";
             filesystem::path zerocoinDir = GetDataDir() / "zerocoin";
+            filesystem::path tokensDir = GetDataDir() / "tokens";
 
             LogPrintf("Deleting blockchain folders blocks, chainstate, sporks and zerocoin\n");
             // We delete in 4 individual steps in case one of the folder is missing already
@@ -1191,6 +1200,11 @@ bool AppInit2()
                 if (filesystem::exists(zerocoinDir)){
                     boost::filesystem::remove_all(zerocoinDir);
                     LogPrintf("-resync: folder deleted: %s\n", zerocoinDir.string().c_str());
+                }
+
+                if (filesystem::exists(tokensDir)){
+                    boost::filesystem::remove_all(tokensDir);
+                    LogPrintf("-resync: folder deleted: %s\n", tokensDir.string().c_str());
                 }
             } catch (boost::filesystem::filesystem_error& error) {
                 LogPrintf("Failed to delete blockchain folders %s\n", error.what());
@@ -1446,6 +1460,7 @@ bool AppInit2()
                 pblocktree.reset();
                 zerocoinDB.reset();
                 pSporkDB.reset();
+                pTokenDB.reset();
 
                 pblocktree.reset(new CBlockTreeDB(nBlockTreeDBCache, false, fReindex));
                 pcoinsdbview.reset(new CCoinsViewDB(nCoinDBCache, false, fReindex));
@@ -1455,6 +1470,7 @@ bool AppInit2()
                 //ION specific: zerocoin and spork DB's
                 zerocoinDB.reset(new CZerocoinDB(0, false, fReindex));
                 pSporkDB.reset(new CSporkDB(0, false, false));
+                pTokenDB.reset(new CTokenDB(0, false, false));
 
                 if (fReindex)
                     pblocktree->WriteReindexing(true);
@@ -1569,6 +1585,18 @@ bool AppInit2()
                         }
                     }
                 }
+
+                // Drop all information from the tokenDB and repopulate
+                if (GetBoolArg("-reindextokens", false)) {
+                    uiInterface.InitMessage(_("Reindexing token database..."));
+                    if (!ReindexTokenDB(strLoadError))
+                        break;
+                }
+
+                // ION: load token data
+                uiInterface.InitMessage(_("Loading token data..."));
+                if (!pTokenDB->LoadTokensFromDB(strLoadError))
+                    break;
 
                 if (!fReindex) {
                     uiInterface.InitMessage(_("Verifying blocks..."));
