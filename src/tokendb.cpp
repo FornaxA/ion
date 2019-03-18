@@ -10,30 +10,30 @@ CTokenDB::CTokenDB(size_t nCacheSize, bool fMemory, bool fWipe) : CLevelDBWrappe
 bool CTokenDB::WriteTokenGroupsBatch(const std::vector<CTokenGroupCreation>& tokenGroups) {
     CLevelDBBatch batch;
     for (std::vector<CTokenGroupCreation>::const_iterator it = tokenGroups.begin(); it != tokenGroups.end(); it++){
-        batch.Write(std::make_pair(std::string("c"), it->tokenGroupInfo.associatedGroup), *it);
+        batch.Write(std::make_pair('c', it->tokenGroupInfo.associatedGroup), *it);
     }
     return WriteBatch(batch);
 }
 
 bool CTokenDB::WriteTokenGroup(const CTokenGroupID& tokenGroupID, const CTokenGroupCreation& tokenGroupCreation) {
-    return Write(std::make_pair(std::string("c"), tokenGroupID), tokenGroupCreation);
+    return Write(std::make_pair('c', tokenGroupID), tokenGroupCreation);
 }
 
 bool CTokenDB::ReadTokenGroup(const CTokenGroupID& tokenGroupID, CTokenGroupCreation& tokenGroupCreation) {
-    return Read(std::make_pair(std::string("c"), tokenGroupID), tokenGroupCreation);
+    return Read(std::make_pair('c', tokenGroupID), tokenGroupCreation);
 }
 
 bool CTokenDB::EraseTokenGroupBatch(const std::vector<CTokenGroupID>& newTokenGroupIDs) {
     CLevelDBBatch batch;
     for (std::vector<CTokenGroupID>::const_iterator it = newTokenGroupIDs.begin(); it != newTokenGroupIDs.end(); it++){
-        batch.Erase(std::make_pair(std::string("c"), *it));
+        batch.Erase(std::make_pair('c', *it));
     }
     return WriteBatch(batch);
 
 }
 
 bool CTokenDB::EraseTokenGroup(const CTokenGroupID& tokenGroupID) {
-    return Erase(std::make_pair(std::string("c"), tokenGroupID));
+    return Erase(std::make_pair('c', tokenGroupID));
 }
 
 bool CTokenDB::DropTokenGroups() {
