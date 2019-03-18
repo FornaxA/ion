@@ -66,6 +66,7 @@ bool ReindexTokenDB(std::string &strError) {
         strError = "Failed to reset token database";
         return false;
     }
+    tokenGroupManager->ClearTokenGroups();
 
     uiInterface.ShowProgress(_("Reindexing token database..."), 0);
 

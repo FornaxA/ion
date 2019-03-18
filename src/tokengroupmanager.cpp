@@ -134,6 +134,10 @@ bool CTokenGroupManager::AddTokenGroup(CTransaction tx, CTokenGroupCreation &new
     return true;
 }
 
+void CTokenGroupManager::ClearTokenGroups() {
+    mapTokenGroups.clear();
+}
+
 bool CTokenGroupManager::RemoveTokenGroup(CTransaction tx, CTokenGroupID &newTokenGroupID) {
     CScript firstOpReturn;
     CTokenGroupInfo tokenGroupInfo;
