@@ -446,7 +446,7 @@ static const CRPCCommand vRPCCommands[] =
         {"wallet", "walletpassphrase", &walletpassphrase, true, false, true},
         {"wallet", "token", &token, false, false, true},
         {"wallet", "managementtoken", &managementtoken, false, false, true},
-        {"wallet", "tokendescription", &tokendescription, false, false, true},
+        {"wallet", "tokeninfo", &tokeninfo, false, false, true},
 
         {"zerocoin", "getzerocoinbalance", &getzerocoinbalance, false, false, true},
         {"zerocoin", "listmintedzerocoins", &listmintedzerocoins, false, false, true},
