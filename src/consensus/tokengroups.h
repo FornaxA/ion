@@ -22,7 +22,7 @@ enum class TokenGroupIdFlags : uint8_t
     SAME_SCRIPT = 1U, // covenants/ encumberances -- output script template must match input
     BALANCE_BCH = 1U << 1, // group inputs and outputs must balance both tokens and BCH
     STICKY_MELT = 1U << 2, // group can always melt tokens
-    MGT_TOKEN = 1U << 3, // group does not pay fees in XDM
+    MGT_TOKEN = 1U << 3, // management tokens are created from magical outputs, and no XDM fees are paid for their creation
 
     DEFAULT = 0
 };
@@ -188,6 +188,27 @@ inline bool hasCapability(GroupAuthorityFlags object, const GroupAuthorityFlags 
 }
 
 inline CAmount toAmount(GroupAuthorityFlags f) { return (CAmount)f; }
+
+// class that just track of the amounts of each group coming into and going out of a transaction
+class CTokenGroupBalance
+{
+public:
+    CTokenGroupBalance()
+        : ctrlPerms(GroupAuthorityFlags::NONE), allowedCtrlOutputPerms(GroupAuthorityFlags::NONE),
+          allowedSubgroupCtrlOutputPerms(GroupAuthorityFlags::NONE), ctrlOutputPerms(GroupAuthorityFlags::NONE),
+          input(0), output(0), numOutputs(0)
+    {
+    }
+    // CTokenGroupInfo groups; // possible groups
+    GroupAuthorityFlags ctrlPerms; // what permissions are provided in inputs
+    GroupAuthorityFlags allowedCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
+    GroupAuthorityFlags allowedSubgroupCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
+    GroupAuthorityFlags ctrlOutputPerms; // What permissions are enabled in outputs
+    CAmount input;
+    CAmount output;
+    uint64_t numOutputs;
+};
+
 class CTokenGroupInfo
 {
 public:
@@ -278,7 +299,7 @@ public:
 };
 
 // Verify that the token groups in this transaction properly balance
-bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view);
+bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view, std::unordered_map<CTokenGroupID, CTokenGroupBalance>& gBalance);
 
 // Return true if any output in this transaction is part of a group
 bool IsAnyTxOutputGrouped(const CTransaction &tx);

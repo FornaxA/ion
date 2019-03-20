@@ -201,29 +201,9 @@ CTokenGroupInfo::CTokenGroupInfo(const CScript &script)
 }
 
 
-// local class that just keeps track of the amounts of each group coming into and going out of a transaction
-class CBalance
+bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view, std::unordered_map<CTokenGroupID, CTokenGroupBalance>& gBalance)
 {
-public:
-    CBalance()
-        : ctrlPerms(GroupAuthorityFlags::NONE), allowedCtrlOutputPerms(GroupAuthorityFlags::NONE),
-          allowedSubgroupCtrlOutputPerms(GroupAuthorityFlags::NONE), ctrlOutputPerms(GroupAuthorityFlags::NONE),
-          input(0), output(0), numOutputs(0)
-    {
-    }
-    // CTokenGroupInfo groups; // possible groups
-    GroupAuthorityFlags ctrlPerms; // what permissions are provided in inputs
-    GroupAuthorityFlags allowedCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
-    GroupAuthorityFlags allowedSubgroupCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
-    GroupAuthorityFlags ctrlOutputPerms; // What permissions are enabled in outputs
-    CAmount input;
-    CAmount output;
-    uint64_t numOutputs;
-};
-
-bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view)
-{
-    std::unordered_map<CTokenGroupID, CBalance> gBalance;
+    gBalance.clear();
     // This is an optimization allowing us to skip single-mint hashes if there are no output groups
     bool anyOutputGroups = false;
     bool anyOutputControlGroups = false;
@@ -320,14 +300,14 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
     for (auto &txo : gBalance)
     {
         CTokenGroupID group = txo.first;
-        CBalance &bal = txo.second;
+        CTokenGroupBalance &bal = txo.second;
         if (group.isSubgroup())
         {
             CTokenGroupID parentgrp = group.parentGroup();
             auto parentSearch = gBalance.find(parentgrp);
             if (parentSearch != gBalance.end()) // The parent group is part of the inputs
             {
-                CBalance &parentData = parentSearch->second;
+                CTokenGroupBalance &parentData = parentSearch->second;
                 if (hasCapability(parentData.ctrlPerms, GroupAuthorityFlags::SUBGROUP))
                 {
                     // Give the subgroup has all the capabilities the parent group had,
@@ -342,12 +322,10 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
         }
     }
 
-    CAmount nXDMFeesNeeded = 0;
-
     // Now pass thru the outputs ensuring balance or mint/melt permission
     for (auto &txo : gBalance)
     {
-        CBalance &bal = txo.second;
+        CTokenGroupBalance &bal = txo.second;
         // If it has an authority, with no input authority, check mint
         if (hasCapability(bal.ctrlOutputPerms, GroupAuthorityFlags::CTRL) &&
             (bal.ctrlPerms == GroupAuthorityFlags::NONE))
@@ -368,28 +346,13 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
                     return state.Invalid(false, REJECT_GROUP_IMBALANCE, "grp-invalid-create",
                          "Multiple grouped outputs created during group creation transaction");
 
-                if (newGrpId.hasFlag(TokenGroupIdFlags::MGT_TOKEN))
-                {
+                if (newGrpId.hasFlag(TokenGroupIdFlags::MGT_TOKEN)) {
                     if (anyInputsGroupManagement) {
                         LogPrint("token", "%s - Group management creation transaction. newGrpId=[%s]\n", __func__, EncodeTokenGroup(newGrpId));
                     } else {
                         return state.Invalid(false, REJECT_INVALID, "grp-invalid-tx",
                             "No group management capability at any input address");
                     }
-                }
-                if (EncodeTokenGroup(newGrpId) == "Params().DarkMatterGroup()")
-                {
-                    // No fee restrictions on creating the XDM token.
-                    // Since the DarkMatter group ID is deterministically derived from the a specific output, this creation tx is a singularity
-                    LogPrint("token", "%s - DarkMatter creation transaction.\nnewGrpId=[%s]\n", __func__, EncodeTokenGroup(newGrpId));
-                }
-                else
-                {
-                    // Creating a token costs a fee in XDM.
-                    // 10% of the weekly burned fees is distributed over masternode owners.
-                    // 10% of the weekly burned fees is distributed over atom token holders
-                    nXDMFeesNeeded += 1.0 * COIN;
-                    LogPrint("token", "%s - newGrpId=[%s] fee cost=[%d]\n", __func__, EncodeTokenGroup(newGrpId), nXDMFeesNeeded);
                 }
 
                 bal.allowedCtrlOutputPerms = bal.ctrlPerms = GroupAuthorityFlags::ALL;
@@ -404,15 +367,17 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
             }
         }
 
-        if ((bal.input > bal.output) && !hasCapability(bal.ctrlPerms, GroupAuthorityFlags::MELT))
+        if (bal.input > bal.output)
         {
-            return state.Invalid(false, REJECT_GROUP_IMBALANCE, "grp-invalid-melt",
-                "Group input exceeds output, but no melt permission");
+            if (!hasCapability(bal.ctrlPerms, GroupAuthorityFlags::MELT))
+                return state.Invalid(false, REJECT_GROUP_IMBALANCE, "grp-invalid-melt",
+                    "Group input exceeds output, but no melt permission");
         }
-        if ((bal.input < bal.output) && !hasCapability(bal.ctrlPerms, GroupAuthorityFlags::MINT))
+        if (bal.input < bal.output)
         {
-            return state.Invalid(false, REJECT_GROUP_IMBALANCE, "grp-invalid-mint",
-                "Group output exceeds input, but no mint permission");
+            if (!hasCapability(bal.ctrlPerms, GroupAuthorityFlags::MINT))
+               return state.Invalid(false, REJECT_GROUP_IMBALANCE, "grp-invalid-mint",
+                    "Group output exceeds input, but no mint permission");
         }
         // Some output permissions are set that are not in the inputs
         if (((uint64_t)(bal.ctrlOutputPerms & GroupAuthorityFlags::ALL)) &

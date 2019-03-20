@@ -324,3 +324,76 @@ UniValue CTokenGroupManager::TokenValueFromAmount(const CAmount& amount, const C
     return UniValue(UniValue::VNUM,
             strprintf("%s%d.%0*d", sign ? "-" : "", quotient, GetTokenGroup(tgID).tokenGroupDescription.decimalPos, remainder));
 }
+
+bool CTokenGroupManager::GetXDMFee(const uint32_t& nXDMTransactions, CAmount& fee) {
+    if (!tgDarkMatterCreation) {
+        fee = 0;
+        return false;
+    }
+    CAmount XDMCoin = tgDarkMatterCreation->tokenGroupDescription.GetCoin();
+    if (nXDMTransactions < 100000) {
+        fee = 0.10 * XDMCoin;
+    } else if (nXDMTransactions < 200000) {
+        fee = 0.09 * XDMCoin;
+    } else if (nXDMTransactions < 300000) {
+        fee = 0.08 * XDMCoin;
+    } else if (nXDMTransactions < 400000) {
+        fee = 0.07 * XDMCoin;
+    } else if (nXDMTransactions < 500000) {
+        fee = 0.06 * XDMCoin;
+    } else if (nXDMTransactions < 600000) {
+        fee = 0.05 * XDMCoin;
+    } else if (nXDMTransactions < 700000) {
+        fee = 0.04 * XDMCoin;
+    } else if (nXDMTransactions < 800000) {
+        fee = 0.03 * XDMCoin;
+    } else if (nXDMTransactions < 900000) {
+        fee = 0.02 * XDMCoin;
+    } else {
+        fee = 0.01 * XDMCoin;
+    }
+    return true;
+}
+
+bool CTokenGroupManager::GetXDMFee(const CBlockIndex* pindex, CAmount& fee) {
+    return GetXDMFee(pindex->nChainXDMTransactions, fee);
+}
+
+bool CTokenGroupManager::CheckXDMFees(const std::unordered_map<CTokenGroupID, CTokenGroupBalance>& tgMintMeltBalance, CValidationState& state, CBlockIndex* pindex, CAmount& nXDMFees) {
+    // Creating a token costs a fee in XDM.
+    // 10% of the weekly burned fees is distributed over masternode owners.
+    // 10% of the weekly burned fees is distributed over atom token holders
+
+    // A token group creation costs 5x the standard XDM fee
+    // Max 1 token group creation per transaction
+
+    CAmount XDMMelted = 0;
+    CAmount feesNeeded = 0;
+    CAmount curXDMFee;
+    GetXDMFee(pindex, curXDMFee);
+    for (auto bal : tgMintMeltBalance) {
+        CTokenGroupCreation tg = GetTokenGroup(bal.first);
+        if (bal.second.output - bal.second.input > 0) {
+            if (!bal.first.hasFlag(TokenGroupIdFlags::MGT_TOKEN)) {
+            }
+        } else if (bal.second.output - bal.second.input < 0) {
+            // Melt
+            if (tg == *tgDarkMatterCreation) {
+                XDMMelted += bal.second.output - bal.second.input;
+            }
+        }
+    }
+    // A token mint transaction costs 5x the standard XDM fee
+/*
+    for (auto tokenMint : newTokenMints) {
+
+    }
+*/
+    // Check how many XDM has been melted
+/*
+    for (auto tokenMelt : newTokenMelts) {
+
+    }
+*/
+    return true;
+}
