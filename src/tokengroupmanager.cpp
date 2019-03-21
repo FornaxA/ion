@@ -4,6 +4,7 @@
 
 #include "tokengroupmanager.h"
 
+#include "dstencode.h"
 #include "rpc/protocol.h"
 #include "utilstrencodings.h"
 
@@ -173,8 +174,9 @@ bool CTokenGroupManager::CreateTokenGroup(CTransaction tx, CTokenGroupCreation &
         }
 
         newTokenGroupCreation = CTokenGroupCreation(tx, tokenGroupInfo, tokenGroupDescription);
+        return true;
     }
-    return true;
+    return false;
 }
 
 void CTokenGroupManager::ClearTokenGroups() {
@@ -359,22 +361,54 @@ bool CTokenGroupManager::GetXDMFee(const CBlockIndex* pindex, CAmount& fee) {
     return GetXDMFee(pindex->nChainXDMTransactions, fee);
 }
 
-bool CTokenGroupManager::CheckXDMFees(const std::unordered_map<CTokenGroupID, CTokenGroupBalance>& tgMintMeltBalance, CValidationState& state, CBlockIndex* pindex, CAmount& nXDMFees) {
+bool CTokenGroupManager::CheckXDMFees(const CTransaction &tx, const std::unordered_map<CTokenGroupID, CTokenGroupBalance>& tgMintMeltBalance, CValidationState& state, CBlockIndex* pindex, CAmount& nXDMFees) {
     // Creating a token costs a fee in XDM.
-    // 10% of the weekly burned fees is distributed over masternode owners.
-    // 10% of the weekly burned fees is distributed over atom token holders
+    // Fees are paid to an XDM management address.
+    // 80% of the fees are burned weekly
+    // 10% of the fees are distributed over masternode owners weekly
+    // 10% of the fees are distributed over atom token holders weekly
 
     // A token group creation costs 5x the standard XDM fee
-    // Max 1 token group creation per transaction
+    // A token mint transaction costs 5x the standard XDM fee
+    // Sending XDM costs 1x the standard XDM fee
+    // When paying fees, there are 2 'free' XDM outputs (fee and change)
 
     CAmount XDMMelted = 0;
-    CAmount feesNeeded = 0;
+    CAmount XDMMinted = 0;
+    uint32_t nXDMOutputs = 0;
+    CAmount XDMFeesPaid = 0;
+
     CAmount curXDMFee;
     GetXDMFee(pindex, curXDMFee);
+
+    nXDMFees = 0;
+
+    for (auto txout : tx.vout) {
+        CTokenGroupInfo grp(txout.scriptPubKey);
+        if (grp.invalid)
+            return false;
+        if (grp.isGroupCreation())
+            nXDMFees = 5 * curXDMFee;
+        if (tgDarkMatterCreation->tokenGroupInfo == grp) {
+            nXDMOutputs++;
+
+            // Currenlty, fees are paid to the address belonging to the Token Management Key
+            // TODO: change this to paying fees to the latest address that received an XDM Melt Authority
+            CTxDestination payeeDest;
+            ExtractDestination(txout.scriptPubKey, payeeDest);
+            if (EncodeDestination(payeeDest) == Params().TokenManagementKey())
+                XDMFeesPaid += grp.quantity;
+        }
+    }
     for (auto bal : tgMintMeltBalance) {
         CTokenGroupCreation tg = GetTokenGroup(bal.first);
         if (bal.second.output - bal.second.input > 0) {
+            // Mint
             if (!bal.first.hasFlag(TokenGroupIdFlags::MGT_TOKEN)) {
+                nXDMFees += 5 * curXDMFee;
+            }
+            if (tg == *tgDarkMatterCreation) {
+                XDMMinted += bal.second.output - bal.second.input;
             }
         } else if (bal.second.output - bal.second.input < 0) {
             // Melt
@@ -383,17 +417,15 @@ bool CTokenGroupManager::CheckXDMFees(const std::unordered_map<CTokenGroupID, CT
             }
         }
     }
-    // A token mint transaction costs 5x the standard XDM fee
-/*
-    for (auto tokenMint : newTokenMints) {
-
+    if (nXDMOutputs > 0) {
+        if (nXDMFees > 0) {
+            // 2 free XDM outputs when minting tokens
+            // to be used for paying fees and a change address
+            if (nXDMOutputs > 2)
+                nXDMFees += 1 * curXDMFee;
+        } else {
+            nXDMFees += 1 * curXDMFee;
+        }
     }
-*/
-    // Check how many XDM has been melted
-/*
-    for (auto tokenMelt : newTokenMelts) {
-
-    }
-*/
-    return true;
+    return XDMFeesPaid > nXDMFees;
 }

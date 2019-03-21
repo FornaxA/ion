@@ -153,7 +153,7 @@ public:
     bool GetXDMFee(const uint32_t& nXDMTransactions, CAmount& fee);
     bool GetXDMFee(const CBlockIndex* pindex, CAmount& fee);
 
-    bool CheckXDMFees(const std::unordered_map<CTokenGroupID, CTokenGroupBalance>& tgMintMeltBalance, CValidationState& state, CBlockIndex* pindex, CAmount& nXDMFees);
+    bool CheckXDMFees(const CTransaction &tx, const std::unordered_map<CTokenGroupID, CTokenGroupBalance>& tgMintMeltBalance, CValidationState& state, CBlockIndex* pindex, CAmount& nXDMFees);
 };
 
 #endif
