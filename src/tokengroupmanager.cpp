@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "tokengroupmanager.h"
+#include "wallet/tokengroupwallet.h"
 
 #include "dstencode.h"
 #include "rpc/protocol.h"
@@ -123,6 +124,21 @@ void CTokenGroupManager::ClearManagementTokenGroups() {
     tgAtomCreation.reset();
 }
 
+bool CTokenGroupManager::MatchesMagic(CTokenGroupID tgID) {
+    if (!tgMagicCreation) return false;
+    return tgID == tgMagicCreation->tokenGroupInfo.associatedGroup;
+}
+
+bool CTokenGroupManager::MatchesDarkMatter(CTokenGroupID tgID) {
+    if (!tgDarkMatterCreation) return false;
+    return tgID == tgDarkMatterCreation->tokenGroupInfo.associatedGroup;
+}
+
+bool CTokenGroupManager::MatchesAtom(CTokenGroupID tgID) {
+    if (!tgAtomCreation) return false;
+    return tgID == tgAtomCreation->tokenGroupInfo.associatedGroup;
+}
+
 bool CTokenGroupManager::AddTokenGroups(const std::vector<CTokenGroupCreation>& newTokenGroups) {
     for (auto tokenGroupCreation : newTokenGroups) {
         ProcessManagementTokenGroups(tokenGroupCreation);
@@ -179,8 +195,15 @@ bool CTokenGroupManager::CreateTokenGroup(CTransaction tx, CTokenGroupCreation &
     return false;
 }
 
-void CTokenGroupManager::ClearTokenGroups() {
+void CTokenGroupManager::ResetTokenGroups() {
     mapTokenGroups.clear();
+
+    CTokenGroupInfo tgInfoION(NoGroup, (CAmount)GroupAuthorityFlags::ALL);
+    CTransaction tgTxION = CTransaction();
+    CTokenGroupDescription tgDescriptionION("ION", "Ion", 8, "https://www.ionomy.com", 0);
+    CTokenGroupCreation tgCreationION(tgTxION, tgInfoION, tgDescriptionION);
+    mapTokenGroups.insert(std::pair<CTokenGroupID, CTokenGroupCreation>(NoGroup, tgCreationION));
+
 }
 
 bool CTokenGroupManager::RemoveTokenGroup(CTransaction tx, CTokenGroupID &newTokenGroupID) {
@@ -212,8 +235,14 @@ bool CTokenGroupManager::RemoveTokenGroup(CTransaction tx, CTokenGroupID &newTok
     return false;
 }
 
-CTokenGroupCreation CTokenGroupManager::GetTokenGroup(const CTokenGroupID& tgID) {
-    return mapTokenGroups.at(tgID);
+bool CTokenGroupManager::GetTokenGroupCreation(const CTokenGroupID& tgID, CTokenGroupCreation& tgCreation) {
+    std::map<CTokenGroupID, CTokenGroupCreation>::iterator iter = mapTokenGroups.find(tgID);
+    if (iter != mapTokenGroups.end()) {
+        tgCreation = mapTokenGroups.at(tgID);
+    } else {
+        return false;
+    }
+    return true;
 }
 std::string CTokenGroupManager::GetTokenGroupNameByID(CTokenGroupID tokenGroupId) {
     CTokenGroupCreation tokenGroupCreation = mapTokenGroups.at(tokenGroupId);
@@ -310,7 +339,9 @@ CAmount CTokenGroupManager::AmountFromTokenValue(const UniValue& value, const CT
     if (!value.isNum() && !value.isStr())
         throw JSONRPCError(RPC_TYPE_ERROR, "Amount is not a number or string");
     CAmount amount;
-    if (!ParseFixedPoint(value.getValStr(), GetTokenGroup(tgID).tokenGroupDescription.decimalPos, &amount))
+    CTokenGroupCreation tgCreation;
+    GetTokenGroupCreation(tgID, tgCreation);
+    if (!ParseFixedPoint(value.getValStr(), tgCreation.tokenGroupDescription.decimalPos, &amount))
         throw JSONRPCError(RPC_TYPE_ERROR, "Invalid amount");
     if (!TokenMoneyRange(amount))
         throw JSONRPCError(RPC_TYPE_ERROR, "Amount out of range");
@@ -318,13 +349,15 @@ CAmount CTokenGroupManager::AmountFromTokenValue(const UniValue& value, const CT
 }
 
 UniValue CTokenGroupManager::TokenValueFromAmount(const CAmount& amount, const CTokenGroupID& tgID) {
-    CAmount tokenCOIN = GetTokenGroup(tgID).tokenGroupDescription.GetCoin();
+    CTokenGroupCreation tgCreation;
+    GetTokenGroupCreation(tgID, tgCreation);
+    CAmount tokenCOIN = tgCreation.tokenGroupDescription.GetCoin();
     bool sign = amount < 0;
     int64_t n_abs = (sign ? -amount : amount);
     int64_t quotient = n_abs / tokenCOIN;
     int64_t remainder = n_abs % tokenCOIN;
     return UniValue(UniValue::VNUM,
-            strprintf("%s%d.%0*d", sign ? "-" : "", quotient, GetTokenGroup(tgID).tokenGroupDescription.decimalPos, remainder));
+            strprintf("%s%d.%0*d", sign ? "-" : "", quotient, tgCreation.tokenGroupDescription.decimalPos, remainder));
 }
 
 bool CTokenGroupManager::GetXDMFee(const uint32_t& nXDMTransactions, CAmount& fee) {
@@ -362,6 +395,7 @@ bool CTokenGroupManager::GetXDMFee(const CBlockIndex* pindex, CAmount& fee) {
 }
 
 bool CTokenGroupManager::CheckXDMFees(const CTransaction &tx, const std::unordered_map<CTokenGroupID, CTokenGroupBalance>& tgMintMeltBalance, CValidationState& state, CBlockIndex* pindex, CAmount& nXDMFees) {
+    if (!tgDarkMatterCreation) return true;
     // Creating a token costs a fee in XDM.
     // Fees are paid to an XDM management address.
     // 80% of the fees are burned weekly
@@ -387,9 +421,9 @@ bool CTokenGroupManager::CheckXDMFees(const CTransaction &tx, const std::unorder
         CTokenGroupInfo grp(txout.scriptPubKey);
         if (grp.invalid)
             return false;
-        if (grp.isGroupCreation())
+        if (grp.isGroupCreation() && !grp.associatedGroup.hasFlag(TokenGroupIdFlags::MGT_TOKEN))
             nXDMFees = 5 * curXDMFee;
-        if (tgDarkMatterCreation->tokenGroupInfo == grp) {
+        if (MatchesDarkMatter(grp.associatedGroup) && !grp.isAuthority()) {
             nXDMOutputs++;
 
             // Currenlty, fees are paid to the address belonging to the Token Management Key
@@ -401,18 +435,17 @@ bool CTokenGroupManager::CheckXDMFees(const CTransaction &tx, const std::unorder
         }
     }
     for (auto bal : tgMintMeltBalance) {
-        CTokenGroupCreation tg = GetTokenGroup(bal.first);
         if (bal.second.output - bal.second.input > 0) {
             // Mint
             if (!bal.first.hasFlag(TokenGroupIdFlags::MGT_TOKEN)) {
                 nXDMFees += 5 * curXDMFee;
             }
-            if (tg == *tgDarkMatterCreation) {
+            if (bal.first == tgDarkMatterCreation->tokenGroupInfo.associatedGroup) {
                 XDMMinted += bal.second.output - bal.second.input;
             }
         } else if (bal.second.output - bal.second.input < 0) {
             // Melt
-            if (tg == *tgDarkMatterCreation) {
+            if (bal.first == tgDarkMatterCreation->tokenGroupInfo.associatedGroup) {
                 XDMMelted += bal.second.output - bal.second.input;
             }
         }
@@ -427,5 +460,55 @@ bool CTokenGroupManager::CheckXDMFees(const CTransaction &tx, const std::unorder
             nXDMFees += 1 * curXDMFee;
         }
     }
-    return XDMFeesPaid > nXDMFees;
+    return XDMFeesPaid >= nXDMFees;
+}
+
+CAmount CTokenGroupManager::GetXDMFeesPaid(const std::vector<CRecipient> outputs) {
+    CAmount XDMFeesPaid = 0;
+    for (auto output : outputs) {
+        CTxDestination payeeDest;
+        if (ExtractDestination(output.scriptPubKey, payeeDest))
+        {
+            if (EncodeDestination(payeeDest) == Params().TokenManagementKey()) {
+                CTokenGroupInfo tgInfo(output.scriptPubKey);
+                if (MatchesDarkMatter(tgInfo.associatedGroup)) {
+                    XDMFeesPaid += tgInfo.isAuthority() ? 0 : tgInfo.quantity;
+                }
+            }
+        }
+    }
+    return XDMFeesPaid;
+}
+
+// Ensure that one of the recipients is an XDM fee payment
+// If an output to the fee address already exists, it ensures that the output is at least XDMFee large
+// Returns true if a new output is added and false if a current output is either increased or kept as-is
+bool CTokenGroupManager::EnsureXDMFee(std::vector<CRecipient> &outputs, CAmount XDMFee) {
+    if (!tgDarkMatterCreation) return false;
+    if (XDMFee <= 0) return false;
+    CTxDestination payeeDest;
+    for (auto &output : outputs) {
+        if (ExtractDestination(output.scriptPubKey, payeeDest))
+        {
+            if (EncodeDestination(payeeDest) == Params().TokenManagementKey()) {
+                CTokenGroupInfo tgInfo(output.scriptPubKey);
+                if (MatchesDarkMatter(tgInfo.associatedGroup) && !tgInfo.isAuthority()) {
+                    if (tgInfo.quantity < XDMFee) {
+                        CScript script = GetScriptForDestination(payeeDest, tgInfo.associatedGroup, XDMFee);
+                        CRecipient recipient = {script, GROUPED_SATOSHI_AMT, false};
+
+                        output.scriptPubKey = script;
+                        return false;
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    CScript script = GetScriptForDestination(DecodeDestination(Params().TokenManagementKey()), tgDarkMatterCreation->tokenGroupInfo.associatedGroup, XDMFee);
+    CRecipient recipient = {script, GROUPED_SATOSHI_AMT, false};
+    outputs.push_back(recipient);
+
+    return true;
 }

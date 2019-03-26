@@ -855,6 +855,12 @@ bool AppInit2()
             LogPrintf("AppInit2 : parameter interaction: -zapwallettxes=<mode> -> setting -rescan=1\n");
     }
 
+    // -reindex implies reindexing the tokens
+    if (GetBoolArg("-reindex", false)) {
+        if (SoftSetBoolArg("-reindextokens", true))
+            LogPrintf("AppInit2 : parameter interaction: -reindex=<mode> -> setting -reindextokens=1\n");
+    }
+
     if (!GetBoolArg("-enableswifttx", fEnableSwiftTX)) {
         if (SoftSetArg("-swifttxdepth", "0"))
             LogPrintf("AppInit2 : parameter interaction: -enableswifttx=false -> setting -nSwiftTXDepth=0\n");
@@ -1425,6 +1431,14 @@ bool AppInit2()
         do {
             try {
                 UnloadBlockIndex();
+                pcoinsTip.reset();
+                pcoinsdbview.reset();
+                pcoinscatcher.reset();
+                pblocktree.reset();
+                zerocoinDB.reset();
+                pSporkDB.reset();
+                pTokenDB.reset();
+
                 pblocktree.reset(new CBlockTreeDB(nBlockTreeDBCache, false, fReindex));
                 pcoinsdbview.reset(new CCoinsViewDB(nCoinDBCache, false, fReindex));
                 pcoinscatcher.reset(new CCoinsViewErrorCatcher(pcoinsdbview.get()));

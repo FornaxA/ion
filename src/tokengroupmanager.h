@@ -46,7 +46,7 @@ public:
     CTokenGroupDescription(std::string strTicker, std::string strName, uint8_t decimalPosIn, std::string strDocumentUrl, uint256 documentHash) :
         strTicker(strTicker), strName(strName), strDocumentUrl(strDocumentUrl), documentHash(documentHash), invalid(false) 
     {
-        decimalPos = decimalPosIn < 16 ? decimalPosIn : 0;
+        decimalPos = decimalPosIn <= 16 ? decimalPosIn : 0;
     };
 
     void Clear() {
@@ -127,9 +127,9 @@ public:
     bool AddTokenGroups(const std::vector<CTokenGroupCreation>& newTokenGroups);
     bool CreateTokenGroup(CTransaction tx, CTokenGroupCreation &newTokenGroupCreation);
     bool RemoveTokenGroup(CTransaction tx, CTokenGroupID &newTokenGroupID);
-    void ClearTokenGroups();
+    void ResetTokenGroups();
 
-    CTokenGroupCreation GetTokenGroup(const CTokenGroupID& tgID);
+    bool GetTokenGroupCreation(const CTokenGroupID& tgID, CTokenGroupCreation& tgCreation);
     std::string GetTokenGroupNameByID(CTokenGroupID tokenGroupId);
     bool GetTokenGroupIdByTicker(std::string strTicker, CTokenGroupID &tokenGroupID);
     bool GetTokenGroupIdByName(std::string strName, CTokenGroupID &tokenGroupID);
@@ -140,6 +140,14 @@ public:
 
     bool ProcessManagementTokenGroups(CTokenGroupCreation tokenGroupCreation);
     void ClearManagementTokenGroups();
+
+    bool MatchesMagic(CTokenGroupID tgID);
+    bool MatchesDarkMatter(CTokenGroupID tgID);
+    bool MatchesAtom(CTokenGroupID tgID);
+
+    CTokenGroupID GetMagicID() { return tgMagicCreation->tokenGroupInfo.associatedGroup; };
+    CTokenGroupID GetDarkMatterID() { return tgDarkMatterCreation->tokenGroupInfo.associatedGroup; };
+    CTokenGroupID GetAtomID() { return tgAtomCreation->tokenGroupInfo.associatedGroup; };
 
     unsigned int GetXDMTxCount(const CBlock &block, const CCoinsViewCache& view, unsigned int &nXDMCount);
     bool IsXDMTx(const CTransaction &transaction, const CCoinsViewCache& inputs);
@@ -154,6 +162,8 @@ public:
     bool GetXDMFee(const CBlockIndex* pindex, CAmount& fee);
 
     bool CheckXDMFees(const CTransaction &tx, const std::unordered_map<CTokenGroupID, CTokenGroupBalance>& tgMintMeltBalance, CValidationState& state, CBlockIndex* pindex, CAmount& nXDMFees);
+    CAmount GetXDMFeesPaid(const std::vector<CRecipient> outputs);
+    bool EnsureXDMFee(std::vector<CRecipient> &outputs, CAmount XDMFee);
 };
 
 #endif
