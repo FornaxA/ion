@@ -1414,6 +1414,13 @@ bool AppInit2()
         do {
             try {
                 UnloadBlockIndex();
+                pcoinsTip.reset();
+                pcoinsdbview.reset();
+                pcoinscatcher.reset();
+                pblocktree.reset();
+                zerocoinDB.reset();
+                pSporkDB.reset();
+
                 pblocktree.reset(new CBlockTreeDB(nBlockTreeDBCache, false, fReindex));
                 pcoinsdbview.reset(new CCoinsViewDB(nCoinDBCache, false, fReindex));
                 pcoinscatcher.reset(new CCoinsViewErrorCatcher(pcoinsdbview.get()));
