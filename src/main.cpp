@@ -2502,6 +2502,7 @@ bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsVi
         int nSpendHeight = pindexPrev->nHeight + 1;
         CAmount nValueIn = 0;
         CAmount nFees = 0;
+        std::unordered_map<CTokenGroupID, CTokenGroupBalance> tgMintMeltBalance;
         for (unsigned int i = 0; i < tx.vin.size(); i++) {
             const COutPoint& prevout = tx.vin[i].prevout;
             const CCoins* coins = inputs.AccessCoins(prevout.hash);
@@ -2528,10 +2529,19 @@ bool CheckInputs(const CTransaction& tx, CValidationState& state, const CCoinsVi
                                           tx.GetHash().ToString(), FormatMoney(nValueIn), FormatMoney(tx.GetValueOut())),
                     REJECT_INVALID, "bad-txns-in-belowout");
 
-            if (((int)chainActive.Tip()->nHeight >= Params().OpGroup_StartHeight()) &&
-                !CheckTokenGroups(tx, state, inputs))
-            {
-                return state.DoS(0, error("Token group inputs and outputs do not balance"), REJECT_MALFORMED, "token-group-imbalance");
+            if ((int)chainActive.Tip()->nHeight >= Params().OpGroup_StartHeight()) {
+                if (!CheckTokenGroups(tx, state, inputs, tgMintMeltBalance))
+                    return state.DoS(0, error("Token group inputs and outputs do not balance"), REJECT_MALFORMED, "token-group-imbalance");
+
+                //Check that all token transactions paid their XDM fees
+                CAmount nXDMFees = 0;
+                if (!fVerifyingBlocks) {
+                    if (!tokenGroupManager->CheckXDMFees(tx, tgMintMeltBalance, state, pindexPrev, nXDMFees)) {
+                        return state.DoS(0, error("Token transaction does not pay enough XDM fees"), REJECT_MALFORMED, "token-group-imbalance");
+                    }
+                } else {
+                    LogPrint("token", "%s - XDM fee payment check skipped on sync\n", __func__);
+                }
             }
 
             // Tally transaction fees
