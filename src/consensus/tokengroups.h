@@ -188,6 +188,27 @@ inline bool hasCapability(GroupAuthorityFlags object, const GroupAuthorityFlags 
 }
 
 inline CAmount toAmount(GroupAuthorityFlags f) { return (CAmount)f; }
+
+// class that just track of the amounts of each group coming into and going out of a transaction
+class CTokenGroupBalance
+{
+public:
+    CTokenGroupBalance()
+        : ctrlPerms(GroupAuthorityFlags::NONE), allowedCtrlOutputPerms(GroupAuthorityFlags::NONE),
+          allowedSubgroupCtrlOutputPerms(GroupAuthorityFlags::NONE), ctrlOutputPerms(GroupAuthorityFlags::NONE),
+          input(0), output(0), numOutputs(0)
+    {
+    }
+    // CTokenGroupInfo groups; // possible groups
+    GroupAuthorityFlags ctrlPerms; // what permissions are provided in inputs
+    GroupAuthorityFlags allowedCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
+    GroupAuthorityFlags allowedSubgroupCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
+    GroupAuthorityFlags ctrlOutputPerms; // What permissions are enabled in outputs
+    CAmount input;
+    CAmount output;
+    uint64_t numOutputs;
+};
+
 class CTokenGroupInfo
 {
 public:
