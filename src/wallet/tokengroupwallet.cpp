@@ -1429,9 +1429,7 @@ extern UniValue managementtoken(const UniValue &paramsIn, bool fHelp)
         ret.push_back(Pair("groupIdentifier", EncodeTokenGroup(grpID)));
         ret.push_back(Pair("transaction", wtx.GetHash().GetHex()));
         return ret;
-    }
-    else
-    {
+    } else {
         throw JSONRPCError(RPC_INVALID_REQUEST, "Unknown group operation");
     }
     return NullUniValue;
@@ -1461,6 +1459,87 @@ extern UniValue tokeninfo(const UniValue &params, bool fHelp)
     UniValue ret(UniValue::VARR);
 
     if (operation == "list") {
+        unsigned int curparam = 1;
+
+        if (curparam < params.size()) {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Too many parameters");
+        }
+
+        for (auto tokenGroupMapping : tokenGroupManager->GetMapTokenGroups()) {
+            LogPrint("token", "%s - tokenGroupMapping has [%s] [%s]\n", __func__, tokenGroupMapping.second.tokenGroupDescription.strTicker, EncodeTokenGroup(tokenGroupMapping.second.tokenGroupInfo.associatedGroup));
+            UniValue entry(UniValue::VOBJ);
+            entry.push_back(Pair("groupIdentifier", EncodeTokenGroup(tokenGroupMapping.second.tokenGroupInfo.associatedGroup)));
+            entry.push_back(Pair("txid", tokenGroupMapping.second.creationTransaction.GetHash().GetHex()));
+            entry.push_back(Pair("ticker", tokenGroupMapping.second.tokenGroupDescription.strTicker));
+            entry.push_back(Pair("name", tokenGroupMapping.second.tokenGroupDescription.strName));
+            entry.push_back(Pair("decimalPos", tokenGroupMapping.second.tokenGroupDescription.decimalPos));
+            entry.push_back(Pair("URL", tokenGroupMapping.second.tokenGroupDescription.strDocumentUrl));
+            entry.push_back(Pair("documentHash", tokenGroupMapping.second.tokenGroupDescription.documentHash.ToString()));
+            ret.push_back(entry);
+        }
+
+    } else if (operation == "stats") {
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+
+        CBlockIndex *pindex = NULL;
+
+        unsigned int curparam = 1;
+
+        if (params.size() > curparam) {
+            uint256 blockId;
+
+            blockId.SetHex(params[curparam].get_str());
+            BlockMap::iterator it = mapBlockIndex.find(blockId);
+            if (it != mapBlockIndex.end()) {
+                pindex = it->second;
+            } else {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Block not found");
+            }
+        } else {
+            pindex = chainActive[chainActive.Height()];
+        }
+
+        uint256 hash = pindex ? pindex->GetBlockHash() : uint256();
+        uint64_t nXDMTransactions = pindex ? pindex->nChainXDMTransactions : 0;
+        uint64_t nHeight = pindex ? pindex->nHeight : -1;
+
+        UniValue entry(UniValue::VOBJ);
+        entry.push_back(Pair("height", nHeight));
+        entry.push_back(Pair("blockhash", hash.GetHex()));
+        entry.push_back(Pair("XDM_count", nXDMTransactions));
+        ret.push_back(entry);
+
+    } else {
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Unknown operation");
+    }
+    return ret;
+}
+
+extern UniValue datafeed(const UniValue &params, bool fHelp)
+{
+    if (!pwalletMain)
+        return NullUniValue;
+
+    if (fHelp || params.size() < 1)
+        throw std::runtime_error(
+            "datafeed [new, follow, unfollow, send] \n"
+            "\nFunctions to manage data and data feeds that a client can track in its database.\n"
+            "'new' creates a new data feed. The costs are 100 Database Tokens. args: token group identifier.\n"
+            "'follow' ensures a datafeed is stored in the client's database. args: token group identifier\n"
+            "'unfollow' ensures a datafeed is not stored in the client's database. args: token group identifier\n"
+            "'send' send a (key, value) pair to a datafeed. args: token group identifier, data\n"
+            "\n" +
+            HelpExampleCli("tokeninfo", "\"https://github.com/ioncoincore/ion/desc.json\""));
+
+    std::string operation;
+    std::string p0 = params[0].get_str();
+    std::transform(p0.begin(), p0.end(), std::back_inserter(operation), ::tolower);
+
+    std::string url;
+
+    UniValue ret(UniValue::VARR);
+
+    if (operation == "send") {
         unsigned int curparam = 1;
 
         if (curparam < params.size()) {
