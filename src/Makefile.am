@@ -174,6 +174,7 @@ BITCOIN_CORE_H = \
   torcontrol.h \
   txdb.h \
   txmempool.h \
+  transactionrecord.h \
   ui_interface.h \
   uint256.h \
   undo.h \
@@ -288,6 +289,7 @@ libbitcoin_wallet_a_SOURCES = \
   kernel.cpp \
   tokendb.cpp \
   tokengroupmanager.cpp \
+  transactionrecord.cpp \
   wallet/wallet.cpp \
   wallet/wallet_ismine.cpp \
   wallet/walletdb.cpp \
