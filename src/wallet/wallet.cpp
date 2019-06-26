@@ -2172,6 +2172,8 @@ void CWallet::AvailableCoins(
                 if (nCoinType == STAKABLE_COINS) {
                     if (pcoin->vout[i].IsZerocoinMint())
                         continue;
+                    if (IsTxOutputGrouped(pcoin->vout[i]))
+                        continue;
                 }
 
                 isminetype mine = IsMine(pcoin->vout[i]);
