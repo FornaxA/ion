@@ -2123,7 +2123,8 @@ void CWallet::AvailableCoins(
         bool fIncludeZeroValue,
         AvailableCoinsType nCoinType,
         bool fUseIX,
-        int nWatchonlyConfig) const
+        int nWatchonlyConfig,
+        bool includeGrouped) const
 {
     vCoins.clear();
 
@@ -2153,6 +2154,9 @@ void CWallet::AvailableCoins(
                 continue;
 
             for (unsigned int i = 0; i < pcoin->vout.size(); i++) {
+                if (!includeGrouped && IsTxOutputGrouped(pcoin->vout[i]))
+                    continue;
+
                 bool found = false;
                 if (nCoinType == ONLY_DENOMINATED) {
                     found = IsDenominatedAmount(pcoin->vout[i].nValue);
