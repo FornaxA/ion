@@ -121,7 +121,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
                 continue;
             }
 
-            string strAddress = "";
+            std::string strAddress = "";
             CTxDestination address;
             if (ExtractDestination(txout.scriptPubKey, address))
                 strAddress = CBitcoinAddress(address).ToString();
