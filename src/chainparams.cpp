@@ -174,6 +174,7 @@ public:
         // Token groups
         nOpGroupStartHeight = 99999999;
         strTokenManagementKey = "inqaYuaES1cmRBXHodp25UceeVPbWQG5wY";
+        nOpGroupNewRequiredConfirmations = 6;
 
         // Fake Serial Attack
         nFakeSerialBlockheightEnd = 1073534;
