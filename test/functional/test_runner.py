@@ -87,6 +87,7 @@ BASE_SCRIPTS= [
     'feature_reindex.py',
     'rpc_bip38.py',
     # vv Tests less than 30s vv
+    'rpc_spork.py',
     'interface_zmq.py', # **TODO**
     'interface_bitcoin_cli.py',
     #'mempool_resurrect.py', # Not required
