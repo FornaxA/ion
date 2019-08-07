@@ -696,6 +696,7 @@ border:1px solid #9e9e9e;
 /* QDialog#SignVerifyMessageDialog QPushButton#pasteButton_SM { /* Paste Button */
 /* QDialog#SignVerifyMessageDialog QLineEdit:!focus { /* Font Hack */
 /* QDialog#SignVerifyMessageDialog QPushButton#copySignatureButton_SM { /* Copy Button */
+/* QDialog#SignVerifyMessageDialog QPushButton#copyHashButton_SM { /* Copy Button */
 /* QDialog#SignVerifyMessageDialog QPushButton#clearButton_SM { /* Clear Button */
 /* QDialog#SignVerifyMessageDialog QPushButton#addressBookButton_VM { /* Verify Message - Address Book Button */
 /* QDialog#SignVerifyMessageDialog QPushButton#clearButton_VM { /* Verify Message - Clear Button */

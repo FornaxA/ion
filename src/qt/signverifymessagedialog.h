@@ -43,6 +43,7 @@ private slots:
     void on_pasteButton_SM_clicked();
     void on_signMessageButton_SM_clicked();
     void on_copySignatureButton_SM_clicked();
+    void on_copyHashButton_SM_clicked();
     void on_clearButton_SM_clicked();
     /* verify message */
     void on_addressBookButton_VM_clicked();

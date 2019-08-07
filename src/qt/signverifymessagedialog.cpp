@@ -28,6 +28,7 @@ SignVerifyMessageDialog::SignVerifyMessageDialog(QWidget* parent) : QDialog(pare
     ui->setupUi(this);
 
     ui->signatureOut_SM->setPlaceholderText(tr("Click \"Sign Message\" to generate signature"));
+    ui->hashOut_SM->setPlaceholderText(tr("Click \"Sign Message\" to generate hash"));
 
     GUIUtil::setupAddressWidget(ui->addressIn_SM, this);
     GUIUtil::setupAddressWidget(ui->addressIn_VM, this);
@@ -35,11 +36,13 @@ SignVerifyMessageDialog::SignVerifyMessageDialog(QWidget* parent) : QDialog(pare
     ui->addressIn_SM->installEventFilter(this);
     ui->messageIn_SM->installEventFilter(this);
     ui->signatureOut_SM->installEventFilter(this);
+    ui->hashOut_SM->installEventFilter(this);
     ui->addressIn_VM->installEventFilter(this);
     ui->messageIn_VM->installEventFilter(this);
     ui->signatureIn_VM->installEventFilter(this);
 
     ui->signatureOut_SM->setFont(GUIUtil::bitcoinAddressFont());
+    ui->hashOut_SM->setFont(GUIUtil::bitcoinAddressFont());
     ui->signatureIn_VM->setFont(GUIUtil::bitcoinAddressFont());
 }
 
@@ -102,6 +105,7 @@ void SignVerifyMessageDialog::on_signMessageButton_SM_clicked()
 
     /* Clear old signature to ensure users don't get confused on error with an old signature displayed */
     ui->signatureOut_SM->clear();
+    ui->hashOut_SM->clear();
 
     CBitcoinAddress addr(ui->addressIn_SM->text().toStdString());
     if (!addr.IsValid()) {
@@ -134,6 +138,39 @@ void SignVerifyMessageDialog::on_signMessageButton_SM_clicked()
     CDataStream ss(SER_GETHASH, 0);
     ss << strMessageMagic;
     ss << ui->messageIn_SM->document()->toPlainText().toStdString();
+    LogPrintf("Hash of message to sign: %s\n", Hash(ss.begin(), ss.end()).ToString());
+    std::string testString = ui->messageIn_SM->document()->toPlainText().toStdString();
+    uint256 testHash = Hash(testString.begin(), testString.end());
+    LogPrintf("Hash of testString: %s\n", testHash.GetHex());
+    LogPrintf("String of hash of testString: %s\n", testHash.ToString());
+    LogPrintf("testHash (result from Hash()): ");
+    for (int i=0; i<32; i++){
+        LogPrintf("%d,", testHash.begin()[i]);
+    }
+    LogPrintf("\n");
+    CDataStream ssTest(SER_GETHASH, 0);
+    ssTest << testString;
+    LogPrintf("Hash of testStream: %s\n", Hash(ssTest.begin(), ssTest.end()).ToString());
+    uint256 testHash1;
+    uint256 testHash2;
+    uint256 testHash3;
+//    CSHA256().Write((unsigned char*)testString.data(), testString.size()).Finalize(testHash2.begin());
+    CSHA256().Write((unsigned char*)&testString[0], testString.size()).Finalize(testHash1.begin());
+    LogPrintf("CSHA256 of testString: %s\n", testHash1.GetHex());
+    LogPrintf("testHash1 bytes: ");
+    for (int i=0; i<32; i++){
+        LogPrintf("%d,", testHash1.begin()[i]);
+    }
+    LogPrintf("\n");
+    CSHA256().Write(testHash1.begin(), 32).Finalize(testHash2.begin());
+    LogPrintf("Second CSHA256 of testString: %s\n", testHash2.GetHex());
+    LogPrintf("testHash2 bytes: ");
+    for (int i=0; i<32; i++){
+        LogPrintf("%d,", testHash2.begin()[i]);
+    }
+    LogPrintf("\n");
+    CHash256().Write((unsigned char*)&testString[0], testString.size()).Finalize(testHash3.begin());
+    LogPrintf("CHash256 of testString: %s\n", testHash3.GetHex());
 
     std::vector<unsigned char> vchSig;
     if (!key.SignCompact(Hash(ss.begin(), ss.end()), vchSig)) {
@@ -146,6 +183,7 @@ void SignVerifyMessageDialog::on_signMessageButton_SM_clicked()
     ui->statusLabel_SM->setText(QString("<nobr>") + tr("Message signed.") + QString("</nobr>"));
 
     ui->signatureOut_SM->setText(QString::fromStdString(EncodeBase64(&vchSig[0], vchSig.size())));
+    ui->hashOut_SM->setText(QString::fromStdString(testHash3.GetHex()));
 }
 
 void SignVerifyMessageDialog::on_copySignatureButton_SM_clicked()
@@ -153,11 +191,17 @@ void SignVerifyMessageDialog::on_copySignatureButton_SM_clicked()
     GUIUtil::setClipboard(ui->signatureOut_SM->text());
 }
 
+void SignVerifyMessageDialog::on_copyHashButton_SM_clicked()
+{
+    GUIUtil::setClipboard(ui->hashOut_SM->text());
+}
+
 void SignVerifyMessageDialog::on_clearButton_SM_clicked()
 {
     ui->addressIn_SM->clear();
     ui->messageIn_SM->clear();
     ui->signatureOut_SM->clear();
+    ui->hashOut_SM->clear();
     ui->statusLabel_SM->clear();
 
     ui->addressIn_SM->setFocus();
@@ -242,6 +286,11 @@ bool SignVerifyMessageDialog::eventFilter(QObject* object, QEvent* event)
             /* Select generated signature */
             if (object == ui->signatureOut_SM) {
                 ui->signatureOut_SM->selectAll();
+                return true;
+            }
+            /* Select generated hash */
+            if (object == ui->hashOut_SM) {
+                ui->hashOut_SM->selectAll();
                 return true;
             }
         } else if (ui->tabWidget->currentIndex() == 1) {
