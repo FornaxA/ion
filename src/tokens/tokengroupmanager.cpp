@@ -53,15 +53,15 @@ bool CTokenGroupManager::MatchesAtom(CTokenGroupID tgID) {
     return tgID == tgAtomCreation->tokenGroupInfo.associatedGroup;
 }
 
-bool CTokenGroupManager::MagicTokensCreated() {
+bool CTokenGroupManager::MagicTokengroupCreated() {
     return tgMagicCreation ? true : false;
 };
 
-bool CTokenGroupManager::DarkMatterTokensCreated() {
+bool CTokenGroupManager::DarkMatterTokengroupCreated() {
     return tgDarkMatterCreation ? true : false;
 };
 
-bool CTokenGroupManager::AtomTokensCreated() {
+bool CTokenGroupManager::AtomTokengroupCreated() {
     return tgAtomCreation ? true : false;
 };
 

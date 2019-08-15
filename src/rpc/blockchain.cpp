@@ -146,7 +146,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
 
     result.push_back(Pair("moneysupply",ValueFromAmount(blockindex->nMoneySupply)));
 
-    if (tokenGroupManager->DarkMatterTokensCreated()) {
+    if (tokenGroupManager->DarkMatterTokengroupCreated()) {
         result.push_back(Pair("XDM_supply", tokenGroupManager->TokenValueFromAmount(blockindex->nXDMSupply, tokenGroupManager->GetDarkMatterID())));
         result.push_back(Pair("XDM_transactions", (uint64_t)blockindex->nXDMTransactions));
     }

@@ -53,12 +53,12 @@ public:
     CTokenGroupID GetDarkMatterID() { return tgDarkMatterCreation->tokenGroupInfo.associatedGroup; };
     CTokenGroupID GetAtomID() { return tgAtomCreation->tokenGroupInfo.associatedGroup; };
 
-    bool MagicTokensCreated();
-    bool DarkMatterTokensCreated();
-    bool AtomTokensCreated();
+    bool MagicTokengroupCreated();
+    bool DarkMatterTokengroupCreated();
+    bool AtomTokengroupCreated();
 
     bool ManagementTokensCreated() {
-        return MagicTokensCreated() && DarkMatterTokensCreated() && AtomTokensCreated();
+        return MagicTokengroupCreated() && DarkMatterTokengroupCreated() && AtomTokengroupCreated();
     }
     bool IsManagementTokenInput(CScript script);
 

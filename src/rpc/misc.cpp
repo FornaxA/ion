@@ -146,7 +146,7 @@ UniValue getinfo(const UniValue& params, bool fHelp)
 
     obj.push_back(Pair("moneysupply",ValueFromAmount(chainActive.Tip()->nMoneySupply)));
 
-    if (tokenGroupManager->DarkMatterTokensCreated()) {
+    if (tokenGroupManager->DarkMatterTokengroupCreated()) {
         obj.push_back(Pair("XDM_supply", tokenGroupManager->TokenValueFromAmount(chainActive.Tip()->nXDMSupply, tokenGroupManager->GetDarkMatterID())));
         obj.push_back(Pair("XDM_transactions", (uint64_t)chainActive.Tip()->nXDMTransactions));
     }

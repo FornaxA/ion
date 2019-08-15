@@ -392,11 +392,11 @@ extern UniValue tokeninfo(const UniValue &params, bool fHelp)
         entry.push_back(Pair("blockhash", hash.GetHex()));
 
 
-        if (tokenGroupManager->DarkMatterTokensCreated()) {
+        if (tokenGroupManager->DarkMatterTokengroupCreated()) {
             entry.push_back(Pair("XDM_supply", tokenGroupManager->TokenValueFromAmount(nXDMSupply, tokenGroupManager->GetDarkMatterID())));
             entry.push_back(Pair("XDM_transactions", (uint64_t)nXDMTransactions));
         }
-        if (tokenGroupManager->MagicTokensCreated()) {
+        if (tokenGroupManager->MagicTokengroupCreated()) {
             entry.push_back(Pair("Magic_supply", tokenGroupManager->TokenValueFromAmount(nMagicSupply, tokenGroupManager->GetMagicID())));
             entry.push_back(Pair("Magic_transactions", (uint64_t)nMagicTransactions));
         }
@@ -1277,7 +1277,7 @@ extern UniValue configuremanagementtoken(const UniValue &params, bool fHelp)
     COutput coin(nullptr, 0, 0, false);
     // If the MagicToken exists: spend a magic token output
     // Otherwise: spend an ION output from the token management address
-    if (tokenGroupManager->MagicTokensCreated()){
+    if (tokenGroupManager->MagicTokengroupCreated()){
         CTokenGroupID magicID = tokenGroupManager->GetMagicID();
 
         std::vector<COutput> coins;

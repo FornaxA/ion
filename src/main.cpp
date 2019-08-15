@@ -3507,10 +3507,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         }
         nValueOut += tx.GetValueOut();
 
-        if (tokenGroupManager->DarkMatterTokensCreated()) {
+        if (tokenGroupManager->DarkMatterTokengroupCreated()) {
             tokenGroupManager->GetTokenTxStats(tx, view, tokenGroupManager->GetDarkMatterID(), nXDMCountInBlock, nXDMMint);
         }
-        if (tokenGroupManager->MagicTokensCreated()) {
+        if (tokenGroupManager->MagicTokengroupCreated()) {
             tokenGroupManager->GetTokenTxStats(tx, view, tokenGroupManager->GetMagicID(), nMagicCountInBlock, nMagicMint);
         }
 
