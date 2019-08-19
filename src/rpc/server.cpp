@@ -463,6 +463,7 @@ static const CRPCCommand vRPCCommands[] =
         {"tokens", "droptokenauthorities", &droptokenauthorities, false, false, true},
         {"tokens", "minttoken", &minttoken, false, false, true},
         {"tokens", "melttoken", &melttoken, false, false, true},
+        {"tokens", "distributedarkmatterfees", &distributedarkmatterfees, false, false, true},
 
         {"zerocoin", "createrawzerocoinstake", &createrawzerocoinstake, false, false, true},
         {"zerocoin", "createrawzerocoinpublicspend", &createrawzerocoinpublicspend, false, false, true},

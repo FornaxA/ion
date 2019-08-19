@@ -368,6 +368,7 @@ extern UniValue listtokenauthorities(const UniValue &params, bool fHelp);
 extern UniValue droptokenauthorities(const UniValue &params, bool fHelp);
 extern UniValue minttoken(const UniValue &params, bool fHelp);
 extern UniValue melttoken(const UniValue &params, bool fHelp);
+extern UniValue distributedarkmatterfees(const UniValue &params, bool fHelp);
 
 bool StartRPC();
 void InterruptRPC();

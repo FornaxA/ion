@@ -7,6 +7,10 @@
 #include "coincontrol.h"
 #include "dstencode.h"
 #include "init.h"
+#include "masternode.h"
+#include "masternode-sync.h"
+#include "masternodeman.h"
+#include "rpc/blockchain.h"
 #include "rpc/protocol.h"
 #include "rpc/server.h"
 #include "tokens/tokengroupmanager.h"
@@ -1960,4 +1964,182 @@ extern UniValue melttoken(const UniValue &params, bool fHelp)
     CWalletTx wtx;
     GroupMelt(wtx, grpID, totalNeeded, wallet);
     return wtx.GetHash().GetHex();
+}
+
+void GetMasternodeAddresses(std::map<CPubKey, uint16_t>& mMasternodeAddresses, uint16_t& nMNCount, std::string strFilter) {
+    nMNCount = 0;
+    int nHeight;
+    {
+        LOCK(cs_main);
+        CBlockIndex* pindex = chainActive.Tip();
+        if(!pindex) return;
+        nHeight = pindex->nHeight;
+    }
+    std::vector<pair<int, CMasternode> > vMasternodeRanks = mnodeman.GetMasternodeRanks(nHeight);
+    for (const auto& s : vMasternodeRanks) {
+        CMasternode* mn = mnodeman.Find(s.second.vin);
+        if (mn != NULL) {
+            if (mn->Status().find(strFilter) == string::npos) continue;
+
+            mMasternodeAddresses[mn->pubKeyCollateralAddress]++;
+            nMNCount++;
+        }
+    }
+}
+
+bool AddTokenRecipient(std::vector<CRecipient>& outputs, CTxDestination dest, CTokenGroupID grpID, CAmount amount) {
+    if (dest == CTxDestination(CNoDestination())) {
+        LogPrintf("token", "%s - Invalid parameter: no valid destination address\n", __func__);
+        return false;
+    }
+    CScript script;
+    CRecipient recipient;
+    if (grpID.isUserGroup() && grpID != NoGroup) {
+        script = GetScriptForDestination(dest, grpID, amount);
+        recipient = {script, GROUPED_SATOSHI_AMT, false};
+    } else {
+        script = GetScriptForDestination(dest, NoGroup, 0);
+        recipient = {script, amount, false};
+    }
+    outputs.push_back(recipient);
+    return true;
+}
+
+extern UniValue distributedarkmatterfees(const UniValue &params, bool fHelp)
+{
+    CWallet *wallet = pwalletMain;
+    if (!pwalletMain)
+        return NullUniValue;
+
+    if (fHelp || params.size() < 1)
+        throw std::runtime_error(
+            "distributedarkmatterfees amount ( confirm ) \n"
+            "\nSends token to a given address.\n"
+            "\n"
+            "1. \"amount\"      (numeric, required) the amount of tokens to send\n"
+            "2. \"confirm\"     (boolean, optional) the amount of tokens to send\n"
+        );
+
+    LOCK2(cs_main, wallet->cs_wallet);
+
+    UniValue ret(UniValue::VARR);
+
+    unsigned int curparam = 0;
+    bool confirmed = false;
+    CAmount totalIONNeeded = 0;
+    CAmount totalIONAvailable = 0;
+    CAmount XDMFeesAvailable = 0;
+    CAmount totalXDMNeeded = 0;
+
+    if (!masternodeSync.IsBlockchainSynced() || !masternodeSync.IsSynced())
+        throw JSONRPCError(RPC_TYPE_ERROR, "The masternode sync process has not completed.");
+
+    if (!tokenGroupManager->ManagementTokensCreated())
+        throw JSONRPCError(RPC_TYPE_ERROR, "The chain is not ready for user tokens.");
+    CTokenGroupID grpID = tokenGroupManager->GetDarkMatterID();
+    if (!grpID.isUserGroup()) {
+        throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: No group specified");
+    }
+
+    std::string distributionAddress = Params().TokenManagementKey();
+    if (DecodeDestination(distributionAddress) == CTxDestination(CNoDestination())) {
+        throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: Invalid destination address");
+    }
+
+    CAmount nAmount = tokenGroupManager->AmountFromTokenValue(params[curparam], grpID);
+    if (nAmount <= 0)
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid parameter: amount");
+
+    curparam++;
+    if (params.size() > curparam) {
+        confirmed = (params[curparam].get_str() == "true");
+    }
+
+    // Determine available XDM (amount and inputs) at XDM collection address
+    std::vector<COutput> coins;
+    std::vector<CRecipient> outputs;
+    GetGroupCoins(wallet, coins, XDMFeesAvailable, grpID, DecodeDestination(distributionAddress));
+    if (XDMFeesAvailable < nAmount) {
+        throw JSONRPCError(RPC_INVALID_PARAMS, "No inputs available");
+    }
+
+    std::vector<COutput> authorityCoins;
+    GetGroupAuthority(wallet, authorityCoins, GroupAuthorityFlags::MELT | GroupAuthorityFlags::CCHILD, grpID);
+    if (authorityCoins.size() < 1) {
+        throw JSONRPCError(RPC_INVALID_PARAMS, "No melt and child authority available");
+    }
+    COutput authorityCoin(nullptr, 0, 0, false);
+    // Just pick the first one for now.
+    for (auto coin : authorityCoins) {
+        authorityCoin = coin;
+        break;
+    }
+    coins.push_back(authorityCoin);
+
+    // Nr of MNs per address
+    std::map<CPubKey, uint16_t> mMasternodeAddresses;
+    uint16_t nMasternodeCount;
+    GetMasternodeAddresses(mMasternodeAddresses, nMasternodeCount, "ENABLED");
+
+    // Calculate per-MN fee
+    // 10% of the amount is distributed over the MNs
+    CAmount nRewardPerMN = nMasternodeCount > 0 ? nAmount / (nMasternodeCount * 10) : 0;
+
+    // Create MN outputs
+    for (auto masternodeAddress : mMasternodeAddresses) {
+        AddTokenRecipient(outputs, masternodeAddress.first.GetID(), grpID, masternodeAddress.second * nRewardPerMN);
+    }
+
+    // Identify ATOM fee recipients
+    std::unordered_map<std::string, CAmount> mAtomBalances;
+    CAmount nAtomsCount = 0; // Should always be 100,000
+    CTokenGroupID atomID = tokenGroupManager->GetAtomID();
+    GetChainTokenBalances(mAtomBalances, nAtomsCount, atomID);
+
+    // Calculate per-ATOM fee
+    // 10% of the amount is distributed over the 100,000 Atoms
+    CAmount nRewardPerAtom = nAtomsCount > 0 ? nAmount / (nAtomsCount * 10) : 0;
+    for (const auto& atomBalance : mAtomBalances) {
+        AddTokenRecipient(outputs, DecodeDestination(atomBalance.first), grpID, nRewardPerAtom * atomBalance.second);
+    }
+
+    // Get data
+    for (auto coin : coins) {
+        totalIONAvailable += coin.tx->vout[coin.i].nValue;
+    }
+    for (auto output : outputs) {
+        totalIONNeeded += output.nAmount;
+        CTokenGroupInfo tg(output.scriptPubKey);
+        if (tg.associatedGroup == grpID && !tg.isAuthority()) {
+            totalXDMNeeded += tg.quantity;
+        }
+    }
+
+    // Renewed XDM authority
+    CReserveKey childAuthorityKey(wallet);
+    totalIONNeeded += RenewAuthority(authorityCoin, outputs, childAuthorityKey);
+
+    // Create return data
+    if (confirmed) {
+        EnsureWalletIsUnlocked();
+        // Create transaction
+        CWalletTx wtxNew;
+        ConstructTx(wtxNew, coins, outputs, totalIONAvailable, totalIONNeeded, XDMFeesAvailable - nAmount, 0, 0, 0, grpID, wallet);
+        ret.push_back(wtxNew.GetHash().GetHex());
+    } else {
+        // Dry run
+        CAmount XDMBurned = nAmount - (nMasternodeCount * nRewardPerMN) - (nAtomsCount * nRewardPerAtom);
+        UniValue paymentStats(UniValue::VOBJ);
+        paymentStats.push_back(Pair("masternode_count", nMasternodeCount));
+        paymentStats.push_back(Pair("masternode_reward", nRewardPerMN));
+        paymentStats.push_back(Pair("total_ion_available", totalIONAvailable));
+        paymentStats.push_back(Pair("total_ion_needed", totalIONNeeded));
+        paymentStats.push_back(Pair("xdm_fees_available", XDMFeesAvailable));
+        paymentStats.push_back(Pair("xdm_burned", XDMBurned));
+        paymentStats.push_back(Pair("amount", nAmount));
+        ret.push_back(paymentStats);
+    }
+
+    childAuthorityKey.KeepKey();
+    return ret;
 }
