@@ -655,6 +655,7 @@ void BitcoinMiner(CWallet* pwallet, bool fProofOfStake)
     CReserveKey reservekey(pwallet);
     unsigned int nExtraNonce = 0;
 
+    bool fLastLoopOrphan = false;
     while (fGenerateBitcoins || fProofOfStake) {
         if (fProofOfStake) {
             if (chainActive.Tip()->nHeight < Params().LAST_POW_BLOCK()) {
@@ -742,7 +743,10 @@ void BitcoinMiner(CWallet* pwallet, bool fProofOfStake)
 
             LogPrintf("CPUMiner : proof-of-stake block was signed %s \n", pblock->GetHash().ToString().c_str());
             SetThreadPriority(THREAD_PRIORITY_NORMAL);
-            ProcessBlockFound(pblock, *pwallet, reservekey);
+            if (!ProcessBlockFound(pblock, *pwallet, reservekey)) {
+                fLastLoopOrphan = true;
+                continue;
+            }
             SetThreadPriority(THREAD_PRIORITY_LOWEST);
 
             continue;
