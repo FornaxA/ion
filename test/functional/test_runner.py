@@ -305,11 +305,11 @@ def run_tests(test_list, src_dir, build_dir, exeext, tmpdir, jobs=1, enable_cove
     test_results = []
 
     max_len_name = len(max(test_list, key=len))
-
-    for _ in range(len(test_list)):
+    test_count = len(test_list)
+    for i in range(test_count):
         test_result, testdir, stdout, stderr = job_queue.get_next()
         test_results.append(test_result)
-
+        done_str = "{}/{} - {}{}{}".format(i + 1, test_count, BOLD[1], test_result.name, BOLD[0])
         if test_result.status == "Passed":
             if stderr == "":
                 logging.debug("%s passed, Duration: %s s" % (done_str, test_result.time))
@@ -407,6 +407,12 @@ class TestHandler:
                               log_stderr))
         if not self.jobs:
             raise IndexError('pop from empty list')
+
+        # Print remaining running jobs when all jobs have been started.
+        if not self.test_list:
+            print("Remaining jobs: [{}]".format(", ".join(j[0] for j in self.jobs)))
+
+        dot_count = 0
         while True:
             # Return first proc that finishes
             time.sleep(.5)
@@ -429,8 +435,12 @@ class TestHandler:
                     self.num_running -= 1
                     self.jobs.remove(j)
 
+                    clearline = '\r' + (' ' * dot_count) + '\r'
+                    print(clearline, end='', flush=True)
+                    dot_count = 0
                     return TestResult(name, status, int(time.time() - time0)), testdir, stdout, stderr
             print('.', end='', flush=True)
+            dot_count += 1
 
 class TestResult():
     def __init__(self, name, status, time):
