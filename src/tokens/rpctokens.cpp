@@ -16,6 +16,7 @@
 #include "utilstrencodings.h"
 #include "wallet/wallet.h"
 
+#include <boost/assign/list_of.hpp>
 #include <boost/lexical_cast.hpp>
 
 extern void WalletTxToJSON(const CWalletTx &wtx, UniValue &entry);
@@ -2152,4 +2153,276 @@ extern UniValue gettokentransaction(const UniValue &params, bool fHelp)
     if (blockindex) result.push_back(Pair("in_active_chain", in_active_chain));
     TokenTxToJSON(tx, hash_block, result);
     return result;
+}
+
+#ifdef ENABLE_WALLET
+UniValue listunspenttokens(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() > 4)
+        throw std::runtime_error(
+            "listunspenttokens ( minconf maxconf  [\"address\",...] watchonlyconfig )\n"
+            "\nReturns array of unspent transaction outputs\n"
+            "with between minconf and maxconf (inclusive) confirmations.\n"
+            "If an UTXO is a grouped output, the return value contains the groupID and token amount.\n"
+            "Optionally filter to only include txouts paid to specified addresses.\n"
+            "Results are an array of Objects, each of which has:\n"
+            "{txid, vout, scriptPubKey, amount, confirmations, spendable}\n"
+
+            "\nArguments:\n"
+            "1. minconf          (numeric, optional, default=1) The minimum confirmations to filter\n"
+            "2. maxconf          (numeric, optional, default=9999999) The maximum confirmations to filter\n"
+            "3. \"addresses\"    (string) A json array of ion addresses to filter\n"
+            "    [\n"
+            "      \"address\"   (string) ion address\n"
+            "      ,...\n"
+            "    ]\n"
+            "4. watchonlyconfig  (numeric, optional, default=1) 1 = list regular unspent transactions, 2 = list only watchonly transactions,  3 = list all unspent transactions (including watchonly)\n"
+
+            "\nResult\n"
+            "[                   (array of json object)\n"
+            "  {\n"
+            "    \"txid\" : \"txid\",        (string) the transaction id\n"
+            "    \"vout\" : n,               (numeric) the vout value\n"
+            "    \"address\" : \"address\",  (string) the ion address\n"
+            "    \"account\" : \"account\",  (string) The associated account, or \"\" for the default account\n"
+            "    \"scriptPubKey\" : \"key\", (string) the script key\n"
+            "    \"redeemScript\" : \"key\", (string) the redeemscript key\n"
+            "    \"amount\" : x.xxx,         (numeric) the transaction amount in btc\n"
+            "    \"token\" : {               (json object, optional) Information on the grouped output\n"
+            "      \"groupID\" : \"key\",      (string) the group identifier\n"
+            "      \"type\" : \"type\",        (string) 'authorities' or 'value'\n"
+            "      \"authorities\" : x.xxx,    (string, optional) overview of token authorities\n"
+            "      \"value\" : x.xxx,          (numeric, optional) the token amount\n"
+            "    }\n"
+            "    \"confirmations\" : n,      (numeric) The number of confirmations\n"
+            "    \"spendable\" : true|false  (boolean) Whether we have the private keys to spend this output\n"
+            "  }\n"
+            "  ,...\n"
+            "]\n"
+
+            "\nExamples\n" +
+            HelpExampleCli("listunspent", "") + HelpExampleCli("listunspent", "6 9999999 \"[\\\"1PGFqEzfmQch1gKD3ra4k18PNj3tTUUSqg\\\",\\\"1LtvqCaApEdUGFkpKMM4MstjcaL4dKg8SP\\\"]\"") + HelpExampleRpc("listunspent", "6, 9999999 \"[\\\"1PGFqEzfmQch1gKD3ra4k18PNj3tTUUSqg\\\",\\\"1LtvqCaApEdUGFkpKMM4MstjcaL4dKg8SP\\\"]\""));
+
+    RPCTypeCheck(params, boost::assign::list_of(UniValue::VNUM)(UniValue::VNUM)(UniValue::VARR)(UniValue::VNUM));
+
+    int nMinDepth = 1;
+    if (params.size() > 0)
+        nMinDepth = params[0].get_int();
+
+    int nMaxDepth = 9999999;
+    if (params.size() > 1)
+        nMaxDepth = params[1].get_int();
+
+    std::set<CBitcoinAddress> setAddress;
+    if (params.size() > 2) {
+        UniValue inputs = params[2].get_array();
+        for (unsigned int inx = 0; inx < inputs.size(); inx++) {
+            const UniValue& input = inputs[inx];
+            CBitcoinAddress address(input.get_str());
+            if (!address.IsValid())
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid ION address: ") + input.get_str());
+            if (setAddress.count(address))
+                throw JSONRPCError(RPC_INVALID_PARAMETER, std::string("Invalid parameter, duplicated address: ") + input.get_str());
+            setAddress.insert(address);
+        }
+    }
+
+    int nWatchonlyConfig = 1;
+    if(params.size() > 3) {
+        nWatchonlyConfig = params[3].get_int();
+        if (nWatchonlyConfig > 3 || nWatchonlyConfig < 1)
+            nWatchonlyConfig = 1;
+    }
+
+    UniValue results(UniValue::VARR);
+    std::vector<COutput> vecOutputs;
+    assert(pwalletMain != NULL);
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+    pwalletMain->AvailableCoins(vecOutputs, false, NULL, false, ALL_COINS, false, nWatchonlyConfig, true);
+    for (const COutput& out : vecOutputs) {
+        if (out.nDepth < nMinDepth || out.nDepth > nMaxDepth)
+            continue;
+
+        if (setAddress.size()) {
+            CTxDestination address;
+            if (!ExtractDestination(out.tx->vout[out.i].scriptPubKey, address))
+                continue;
+
+            if (!setAddress.count(address))
+                continue;
+        }
+
+        CAmount nValue = out.tx->vout[out.i].nValue;
+        const CScript& pk = out.tx->vout[out.i].scriptPubKey;
+        UniValue entry(UniValue::VOBJ);
+        entry.push_back(Pair("txid", out.tx->GetHash().GetHex()));
+        entry.push_back(Pair("vout", out.i));
+        CTxDestination address;
+        if (ExtractDestination(out.tx->vout[out.i].scriptPubKey, address)) {
+            entry.push_back(Pair("address", CBitcoinAddress(address).ToString()));
+            if (pwalletMain->mapAddressBook.count(address))
+                entry.push_back(Pair("account", pwalletMain->mapAddressBook[address].name));
+        }
+        entry.push_back(Pair("scriptPubKey", HexStr(pk.begin(), pk.end())));
+        if (pk.IsPayToScriptHash()) {
+            CTxDestination address;
+            if (ExtractDestination(pk, address)) {
+                const CScriptID& hash = boost::get<CScriptID>(address);
+                CScript redeemScript;
+                if (pwalletMain->GetCScript(hash, redeemScript))
+                    entry.push_back(Pair("redeemScript", HexStr(redeemScript.begin(), redeemScript.end())));
+            }
+        }
+        entry.push_back(Pair("amount", ValueFromAmount(nValue)));
+
+        CTokenGroupInfo tgInfo(pk);
+        CTokenGroupCreation tgCreation;
+        if (!tgInfo.isInvalid()) {
+            CTokenGroupCreation tgCreation;
+            if (tokenGroupManager->GetTokenGroupCreation(tgInfo.associatedGroup, tgCreation)) {
+                UniValue tokenEntry(UniValue::VOBJ);
+                tokenEntry.push_back(Pair("groupID", EncodeTokenGroup(tgInfo.associatedGroup)));
+                tokenEntry.push_back(Pair("ticker", tgCreation.tokenGroupDescription.strTicker));
+                if (tgInfo.isAuthority()){
+                    tokenEntry.push_back(Pair("type", "authority"));
+                    tokenEntry.push_back(Pair("authorities", EncodeGroupAuthority(tgInfo.controllingGroupFlags())));
+                } else {
+                    tokenEntry.push_back(Pair("type", "amount"));
+                    tokenEntry.push_back(Pair("value", tokenGroupManager->TokenValueFromAmount(tgInfo.getAmount(), tgCreation.tokenGroupInfo.associatedGroup)));
+                }
+                entry.push_back(Pair("token", tokenEntry));
+            }
+        }
+
+        entry.push_back(Pair("confirmations", out.nDepth));
+        entry.push_back(Pair("spendable", out.fSpendable));
+        results.push_back(entry);
+    }
+
+    return results;
+}
+#endif
+
+UniValue createrawtokentransaction(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() < 2 || params.size() > 3)
+        throw std::runtime_error(
+            "createrawtransaction [{\"txid\":\"id\",\"vout\":n},...] {\"address\":amount,...} ( locktime )\n"
+            "\nCreate a transaction spending the given inputs and sending to the given addresses.\n"
+            "Returns hex-encoded raw transaction.\n"
+            "Note that the transaction's inputs are not signed, and\n"
+            "it is not stored in the wallet or transmitted to the network.\n"
+
+            "\nArguments:\n"
+            "1. \"transactions\"        (string, required) A json array of json objects\n"
+            "     [\n"
+            "       {\n"
+            "         \"txid\":\"id\",  (string, required) The transaction id\n"
+            "         \"vout\":n,       (numeric, required) The output number\n"
+            "         \"sequence\":n    (numeric, optional) The sequence number\n"
+            "       }\n"
+            "       ,...\n"
+            "     ]\n"
+            "2. \"destinations\"        (string, required) a json object with addresses as keys and a json objects with the ION and tokens to send\n"
+            "    {\n"
+            "      \"address\":         (numeric, required) The key is the ION address, the value is a json object with an ION amount, tokengroup ID and token value as values\n"
+            "      {\n"
+            "        \"amount\":\"ION amount\"        (numeric, required) The ION amount\n"
+            "        \"group_id\":\"groupID\"         (numeric, required) The tokengroup ID\n"
+            "        \"token_value\":\"token value\"  (numeric, required) The token value\n"
+            "      },...\n"
+            "    }\n"
+            "3. locktime                (numeric, optional, default=0) Raw locktime. Non-0 value also locktime-activates inputs\n"
+
+            "\nResult:\n"
+            "\"transaction\"            (string) hex string of the transaction\n"
+
+            "\nExamples\n" +
+            HelpExampleCli("createrawtransaction", "\"[{\\\"txid\\\":\\\"myid\\\",\\\"vout\\\":0}]\" \"{\\\"address\\\":0.01}\"") + HelpExampleRpc("createrawtransaction", "\"[{\\\"txid\\\":\\\"myid\\\",\\\"vout\\\":0}]\", \"{\\\"address\\\":0.01}\""));
+
+    LOCK(cs_main);
+    RPCTypeCheck(params, boost::assign::list_of(UniValue::VARR)(UniValue::VOBJ)(UniValue::VNUM));
+    if (params[0].isNull() || params[1].isNull())
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, arguments 1 and 2 must be non-null");
+
+    UniValue inputs = params[0].get_array();
+    UniValue sendTo = params[1].get_obj();
+
+    CMutableTransaction rawTx;
+
+    if (params.size() > 2 && !params[2].isNull()) {
+        int64_t nLockTime = params[2].get_int64();
+        if (nLockTime < 0 || nLockTime > std::numeric_limits<uint32_t>::max())
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, locktime out of range");
+        rawTx.nLockTime = nLockTime;
+    }
+
+    for (unsigned int idx = 0; idx < inputs.size(); idx++) {
+        const UniValue& input = inputs[idx];
+        const UniValue& o = input.get_obj();
+
+        uint256 txid = ParseHashO(o, "txid");
+
+        const UniValue& vout_v = find_value(o, "vout");
+        if (!vout_v.isNum())
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, missing vout key");
+        int nOutput = vout_v.get_int();
+        if (nOutput < 0)
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, vout must be positive");
+
+        uint32_t nSequence = (rawTx.nLockTime ? std::numeric_limits<uint32_t>::max() - 1 : std::numeric_limits<uint32_t>::max());
+
+        // set the sequence number if passed in the parameters object
+        const UniValue& sequenceObj = find_value(o, "sequence");
+        if (sequenceObj.isNum()) {
+            int64_t seqNr64 = sequenceObj.get_int64();
+            if (seqNr64 < 0 || seqNr64 > std::numeric_limits<uint32_t>::max())
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, sequence number is out of range");
+            else
+                nSequence = (uint32_t)seqNr64;
+        }
+
+        CTxIn in(COutPoint(txid, nOutput), CScript(), nSequence);
+
+        rawTx.vin.push_back(in);
+    }
+
+    std::set<CTxDestination> setDestinations;
+    std::vector<std::string> addrList = sendTo.getKeys();
+    for (const std::string& name_ : addrList) {
+        UniValue recipientObj = sendTo[name_];
+
+        CTxDestination dst = DecodeDestination(name_, Params());
+        if (dst == CTxDestination(CNoDestination())) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid parameter: destination address");
+        }
+        if (setDestinations.count(dst))
+            throw JSONRPCError(RPC_INVALID_PARAMETER, std::string("Invalid parameter, duplicated address: ")+name_);
+        setDestinations.insert(dst);
+
+        std::string sTokenGroupID = recipientObj["group_id"].get_str();
+        CTokenGroupID tgID = GetTokenGroup(sTokenGroupID);
+        if (!tgID.isUserGroup()) {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: No group specified");
+        }
+        CTokenGroupCreation tgCreation;
+        if (!tokenGroupManager->GetTokenGroupCreation(tgID, tgCreation)) {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameter: Token group configuration transaction not found. Has it confirmed?");
+        }
+
+        CAmount nAmount = AmountFromValue(recipientObj["amount"]);
+
+        CAmount nTokenAmount = tokenGroupManager->AmountFromTokenValue(recipientObj["token_value"], tgID);
+        if (nTokenAmount <= 0)
+            throw JSONRPCError(RPC_TYPE_ERROR, "Invalid parameter: token_amount");
+        CScript script;
+        CRecipient recipient;
+
+        script = GetScriptForDestination(dst, tgID, nTokenAmount);
+        CTxOut txout(nAmount, script);
+
+        rawTx.vout.push_back(txout);
+    }
+
+    return EncodeHexTx(rawTx);
 }

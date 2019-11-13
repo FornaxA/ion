@@ -356,10 +356,12 @@ extern UniValue setmocktime(const UniValue& params, bool fHelp);
 extern UniValue getstakingstatus(const UniValue& params, bool fHelp);
 
 extern UniValue tokeninfo(const UniValue& params, bool fHelp); // in tokens/rpctokens.cpp
+extern UniValue createrawtokentransaction(const UniValue& params, bool fHelp);
 extern UniValue gettokenbalance(const UniValue &params, bool fHelp);
 extern UniValue gettokentransaction(const UniValue &params, bool fHelp);
 extern UniValue listtokentransactions(const UniValue &params, bool fHelp);
 extern UniValue listtokenssinceblock(const UniValue &params, bool fHelp);
+extern UniValue listunspenttokens(const UniValue& params, bool fHelp);
 extern UniValue sendtoken(const UniValue &params, bool fHelp);
 extern UniValue configuretoken(const UniValue &params, bool fHelp);
 extern UniValue configuremanagementtoken(const UniValue &params, bool fHelp);
